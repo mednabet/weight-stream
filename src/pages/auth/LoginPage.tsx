@@ -64,51 +64,51 @@ export function LoginPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Redirection en cours...</p>
+          <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground text-sm sm:text-base">Redirection en cours...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-8 relative">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 sm:p-6 md:p-8 relative">
       {/* Back button */}
       <Link 
         to="/" 
-        className="absolute top-6 left-6 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-1 sm:gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm sm:text-base"
       >
-        <ArrowLeft className="w-5 h-5" />
-        <span>Accueil</span>
+        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span className="hidden sm:inline">Accueil</span>
       </Link>
       
       <div className="w-full max-w-md">
         {/* Logo and title */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 border border-primary/20 mb-6">
-            <Factory className="w-10 h-10 text-primary" />
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-primary/10 border border-primary/20 mb-4 sm:mb-6">
+            <Factory className="w-8 h-8 sm:w-10 sm:h-10 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Production Manager</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Production Manager</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">
             Connectez-vous pour accéder au terminal
           </p>
         </div>
 
         {/* Login form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+          <div className="bg-card rounded-xl border border-border p-4 sm:p-6 space-y-4 sm:space-y-5">
             {/* Email */}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-base">Email</Label>
+              <Label htmlFor="email" className="text-sm sm:text-base">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Mail className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="votre@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-14 text-lg pl-12"
+                  className="h-12 sm:h-14 text-base sm:text-lg pl-10 sm:pl-12"
                   autoComplete="email"
                   autoFocus
                 />
@@ -117,16 +117,16 @@ export function LoginPage() {
 
             {/* Password */}
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-base">Mot de passe</Label>
+              <Label htmlFor="password" className="text-sm sm:text-base">Mot de passe</Label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Lock className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                 <Input
                   id="password"
                   type="password"
                   placeholder="Entrez votre mot de passe"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-14 text-lg pl-12"
+                  className="h-12 sm:h-14 text-base sm:text-lg pl-10 sm:pl-12"
                   autoComplete="current-password"
                 />
               </div>
@@ -134,9 +134,9 @@ export function LoginPage() {
 
             {/* Error message */}
             {error && (
-              <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                <span className="text-sm font-medium">{error}</span>
+              <div className="flex items-center gap-2 p-3 sm:p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium">{error}</span>
               </div>
             )}
           </div>
@@ -146,11 +146,11 @@ export function LoginPage() {
             type="submit"
             size="lg"
             disabled={isLoading || !email || !password}
-            className="w-full h-14 text-lg"
+            className="w-full h-12 sm:h-14 text-base sm:text-lg"
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
                 Connexion...
               </>
             ) : (
@@ -160,8 +160,8 @@ export function LoginPage() {
         </form>
 
         {/* Info */}
-        <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
-          <p className="text-sm text-muted-foreground text-center">
+        <div className="mt-6 sm:mt-8 p-3 sm:p-4 rounded-lg bg-muted/50 border border-border">
+          <p className="text-xs sm:text-sm text-muted-foreground text-center">
             Contactez votre administrateur ou superviseur pour obtenir un compte.
           </p>
         </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,13 +56,19 @@ interface CreateUserDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUserCreated?: () => void;
+  defaultRole?: 'operator' | 'supervisor';
 }
 
-export function CreateUserDialog({ open, onOpenChange, onUserCreated }: CreateUserDialogProps) {
+export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRole = 'operator' }: CreateUserDialogProps) {
   const { role: currentUserRole } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'operator' | 'supervisor'>('operator');
+  const [role, setRole] = useState<'operator' | 'supervisor'>(defaultRole);
+
+  // Update role when defaultRole changes
+  useEffect(() => {
+    setRole(defaultRole);
+  }, [defaultRole]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,11 +128,11 @@ export function CreateUserDialog({ open, onOpenChange, onUserCreated }: CreateUs
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="w-5 h-5" />
-            Créer un utilisateur
+            Créer un {defaultRole === 'supervisor' ? 'superviseur' : 'opérateur'}
           </DialogTitle>
           <DialogDescription>
             {canCreateSupervisor 
-              ? 'Créez un nouvel opérateur ou superviseur'
+              ? `Créez un nouvel ${defaultRole === 'supervisor' ? 'superviseur' : 'opérateur'}`
               : 'Créez un nouvel opérateur'}
           </DialogDescription>
         </DialogHeader>
