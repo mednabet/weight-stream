@@ -4,7 +4,7 @@ export type UserRole = 'admin' | 'supervisor' | 'operator';
 
 export type LineState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'CAPTURING' | 'COOLDOWN' | 'ERROR';
 
-export type WeightStatus = 'stable' | 'unstable' | 'error' | 'offline';
+export type WeightStatus = 'stable' | 'unstable' | 'error' | 'offline' | 'disconnected';
 
 export type PhotocellState = 0 | 1;
 
@@ -21,11 +21,16 @@ export interface User {
 
 export interface Terminal {
   id: string;
-  deviceUid: string;
+  device_uid: string;
+  deviceUid?: string;
   name: string;
-  lineId: string;
-  lastPing?: string;
-  isOnline: boolean;
+  line_id: string | null;
+  lineId?: string | null;
+  ip_address?: string | null;
+  last_ping?: string | null;
+  lastPing?: string | null;
+  is_online: boolean;
+  isOnline?: boolean;
 }
 
 export interface Balance {
@@ -39,22 +44,33 @@ export interface Balance {
 export interface Product {
   id: string;
   name: string;
-  code: string;
-  targetWeight: number;
-  minWeight: number;
-  maxWeight: number;
-  unit: string;
-  tolerancePercent: number;
+  reference: string;
+  code?: string;
+  target_weight: number;
+  targetWeight?: number;
+  tolerance_min: number;
+  tolerance_max: number;
+  minWeight?: number;
+  maxWeight?: number;
+  weight_unit_id?: string | null;
+  unit?: string;
+  tolerancePercent?: number;
+  is_active?: boolean;
 }
 
 export interface ProductionLine {
   id: string;
   name: string;
-  code: string;
-  balanceUrl: string;
-  photocellUrl: string;
-  state: LineState;
-  isActive: boolean;
+  description?: string | null;
+  code?: string;
+  scale_url?: string | null;
+  balanceUrl?: string;
+  photocell_url?: string | null;
+  photocellUrl?: string;
+  state?: LineState;
+  is_active: boolean;
+  isActive?: boolean;
+  weight_unit_id?: string | null;
 }
 
 export interface WeightReading {
@@ -65,26 +81,38 @@ export interface WeightReading {
 
 export interface ProductionTask {
   id: string;
-  lineId: string;
-  productId: string;
-  product: Product;
-  operatorId: string;
-  operator: User;
-  state: 'active' | 'paused' | 'completed' | 'cancelled';
-  startedAt: string;
+  line_id: string;
+  lineId?: string;
+  product_id: string;
+  productId?: string;
+  product?: Product;
+  line?: ProductionLine;
+  operator_id?: string | null;
+  operatorId?: string;
+  operator?: User;
+  status: 'pending' | 'in_progress' | 'paused' | 'completed' | 'cancelled';
+  state?: 'active' | 'paused' | 'completed' | 'cancelled';
+  started_at?: string | null;
+  startedAt?: string;
+  paused_at?: string | null;
   pausedAt?: string;
+  completed_at?: string | null;
   completedAt?: string;
+  target_quantity: number;
   targetQuantity?: number;
-  completedQuantity: number;
-  items: ProductionItem[];
+  produced_quantity: number;
+  completedQuantity?: number;
+  items?: ProductionItem[];
 }
 
 export interface ProductionItem {
   id: string;
-  taskId: string;
+  task_id: string;
+  taskId?: string;
   weight: number;
   status: 'ok' | 'underweight' | 'overweight';
-  capturedAt: string;
+  captured_at: string;
+  capturedAt?: string;
   sequence: number;
 }
 

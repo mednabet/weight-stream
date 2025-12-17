@@ -54,30 +54,30 @@ export const mockUsers: User[] = [
 
 // Mock Products
 export const mockProducts: Product[] = [
-  { id: 'prod-1', name: 'Pièce Standard A', code: 'PSA-001', targetWeight: 250, minWeight: 245, maxWeight: 255, unit: 'g', tolerancePercent: 2 },
-  { id: 'prod-2', name: 'Pièce Standard B', code: 'PSB-002', targetWeight: 500, minWeight: 490, maxWeight: 510, unit: 'g', tolerancePercent: 2 },
-  { id: 'prod-3', name: 'Composant Lourd', code: 'CL-003', targetWeight: 1500, minWeight: 1470, maxWeight: 1530, unit: 'g', tolerancePercent: 2 },
-  { id: 'prod-4', name: 'Micro-Composant', code: 'MC-004', targetWeight: 50, minWeight: 48, maxWeight: 52, unit: 'g', tolerancePercent: 4 },
-  { id: 'prod-5', name: 'Assemblage Final', code: 'AF-005', targetWeight: 2.5, minWeight: 2.45, maxWeight: 2.55, unit: 'kg', tolerancePercent: 2 },
-  { id: 'prod-6', name: 'Pièce Moulée X', code: 'PMX-006', targetWeight: 180, minWeight: 175, maxWeight: 185, unit: 'g', tolerancePercent: 2.8 },
-  { id: 'prod-7', name: 'Support Métallique', code: 'SM-007', targetWeight: 750, minWeight: 735, maxWeight: 765, unit: 'g', tolerancePercent: 2 },
-  { id: 'prod-8', name: 'Plaque Plastique', code: 'PP-008', targetWeight: 120, minWeight: 115, maxWeight: 125, unit: 'g', tolerancePercent: 4.2 },
-  { id: 'prod-9', name: 'Boîtier Aluminium', code: 'BA-009', targetWeight: 320, minWeight: 312, maxWeight: 328, unit: 'g', tolerancePercent: 2.5 },
-  { id: 'prod-10', name: 'Kit Complet', code: 'KC-010', targetWeight: 5, minWeight: 4.9, maxWeight: 5.1, unit: 'kg', tolerancePercent: 2 },
+  { id: 'prod-1', name: 'Pièce Standard A', reference: 'PSA-001', code: 'PSA-001', target_weight: 250, targetWeight: 250, tolerance_min: 245, tolerance_max: 255, minWeight: 245, maxWeight: 255, unit: 'g', tolerancePercent: 2 },
+  { id: 'prod-2', name: 'Pièce Standard B', reference: 'PSB-002', code: 'PSB-002', target_weight: 500, targetWeight: 500, tolerance_min: 490, tolerance_max: 510, minWeight: 490, maxWeight: 510, unit: 'g', tolerancePercent: 2 },
+  { id: 'prod-3', name: 'Composant Lourd', reference: 'CL-003', code: 'CL-003', target_weight: 1500, targetWeight: 1500, tolerance_min: 1470, tolerance_max: 1530, minWeight: 1470, maxWeight: 1530, unit: 'g', tolerancePercent: 2 },
+  { id: 'prod-4', name: 'Micro-Composant', reference: 'MC-004', code: 'MC-004', target_weight: 50, targetWeight: 50, tolerance_min: 48, tolerance_max: 52, minWeight: 48, maxWeight: 52, unit: 'g', tolerancePercent: 4 },
+  { id: 'prod-5', name: 'Assemblage Final', reference: 'AF-005', code: 'AF-005', target_weight: 2500, targetWeight: 2.5, tolerance_min: 2450, tolerance_max: 2550, minWeight: 2.45, maxWeight: 2.55, unit: 'kg', tolerancePercent: 2 },
+  { id: 'prod-6', name: 'Pièce Moulée X', reference: 'PMX-006', code: 'PMX-006', target_weight: 180, targetWeight: 180, tolerance_min: 175, tolerance_max: 185, minWeight: 175, maxWeight: 185, unit: 'g', tolerancePercent: 2.8 },
+  { id: 'prod-7', name: 'Support Métallique', reference: 'SM-007', code: 'SM-007', target_weight: 750, targetWeight: 750, tolerance_min: 735, tolerance_max: 765, minWeight: 735, maxWeight: 765, unit: 'g', tolerancePercent: 2 },
+  { id: 'prod-8', name: 'Plaque Plastique', reference: 'PP-008', code: 'PP-008', target_weight: 120, targetWeight: 120, tolerance_min: 115, tolerance_max: 125, minWeight: 115, maxWeight: 125, unit: 'g', tolerancePercent: 4.2 },
+  { id: 'prod-9', name: 'Boîtier Aluminium', reference: 'BA-009', code: 'BA-009', target_weight: 320, targetWeight: 320, tolerance_min: 312, tolerance_max: 328, minWeight: 312, maxWeight: 328, unit: 'g', tolerancePercent: 2.5 },
+  { id: 'prod-10', name: 'Kit Complet', reference: 'KC-010', code: 'KC-010', target_weight: 5000, targetWeight: 5, tolerance_min: 4900, tolerance_max: 5100, minWeight: 4.9, maxWeight: 5.1, unit: 'kg', tolerancePercent: 2 },
 ];
 
 // Mock Production Lines
 export const mockLines: ProductionLine[] = [
-  { id: 'line-1', name: 'Ligne 1 - Assemblage', code: 'L1', balanceUrl: 'http://pc-line1/poids/poids.txt', photocellUrl: 'http://pc-line1/io/photocellule.txt', state: 'RUNNING', isActive: true },
-  { id: 'line-2', name: 'Ligne 2 - Moulage', code: 'L2', balanceUrl: 'http://pc-line2/poids/poids.txt', photocellUrl: 'http://pc-line2/io/photocellule.txt', state: 'PAUSED', isActive: true },
-  { id: 'line-3', name: 'Ligne 3 - Finition', code: 'L3', balanceUrl: 'http://pc-line3/poids/poids.txt', photocellUrl: 'http://pc-line3/io/photocellule.txt', state: 'IDLE', isActive: true },
+  { id: 'line-1', name: 'Ligne 1 - Assemblage', code: 'L1', scale_url: 'http://pc-line1/poids/poids.txt', balanceUrl: 'http://pc-line1/poids/poids.txt', photocell_url: 'http://pc-line1/io/photocellule.txt', photocellUrl: 'http://pc-line1/io/photocellule.txt', state: 'RUNNING', is_active: true, isActive: true },
+  { id: 'line-2', name: 'Ligne 2 - Moulage', code: 'L2', scale_url: 'http://pc-line2/poids/poids.txt', balanceUrl: 'http://pc-line2/poids/poids.txt', photocell_url: 'http://pc-line2/io/photocellule.txt', photocellUrl: 'http://pc-line2/io/photocellule.txt', state: 'PAUSED', is_active: true, isActive: true },
+  { id: 'line-3', name: 'Ligne 3 - Finition', code: 'L3', scale_url: 'http://pc-line3/poids/poids.txt', balanceUrl: 'http://pc-line3/poids/poids.txt', photocell_url: 'http://pc-line3/io/photocellule.txt', photocellUrl: 'http://pc-line3/io/photocellule.txt', state: 'IDLE', is_active: true, isActive: true },
 ];
 
 // Mock Terminals
 export const mockTerminals: Terminal[] = [
-  { id: 'term-1', deviceUid: 'KIOSK-L1-001', name: 'Terminal Ligne 1', lineId: 'line-1', lastPing: new Date().toISOString(), isOnline: true },
-  { id: 'term-2', deviceUid: 'KIOSK-L2-001', name: 'Terminal Ligne 2', lineId: 'line-2', lastPing: new Date().toISOString(), isOnline: true },
-  { id: 'term-3', deviceUid: 'KIOSK-L3-001', name: 'Terminal Ligne 3', lineId: 'line-3', lastPing: new Date(Date.now() - 300000).toISOString(), isOnline: false },
+  { id: 'term-1', device_uid: 'KIOSK-L1-001', deviceUid: 'KIOSK-L1-001', name: 'Terminal Ligne 1', line_id: 'line-1', lineId: 'line-1', last_ping: new Date().toISOString(), lastPing: new Date().toISOString(), is_online: true, isOnline: true },
+  { id: 'term-2', device_uid: 'KIOSK-L2-001', deviceUid: 'KIOSK-L2-001', name: 'Terminal Ligne 2', line_id: 'line-2', lineId: 'line-2', last_ping: new Date().toISOString(), lastPing: new Date().toISOString(), is_online: true, isOnline: true },
+  { id: 'term-3', device_uid: 'KIOSK-L3-001', deviceUid: 'KIOSK-L3-001', name: 'Terminal Ligne 3', line_id: 'line-3', lineId: 'line-3', last_ping: new Date(Date.now() - 300000).toISOString(), lastPing: new Date(Date.now() - 300000).toISOString(), is_online: false, isOnline: false },
 ];
 
 // Mock Balances
@@ -91,21 +91,29 @@ export const mockBalances: Balance[] = [
 function generateMockItems(count: number, taskId: string, product: Product): ProductionItem[] {
   const items: ProductionItem[] = [];
   const now = Date.now();
+  const targetWeight = product.targetWeight || product.target_weight || 0;
+  const tolerance = product.tolerancePercent || 2;
+  const minWeight = product.minWeight || product.tolerance_min || 0;
+  const maxWeight = product.maxWeight || product.tolerance_max || 0;
   
   for (let i = 0; i < count; i++) {
-    const variance = (Math.random() - 0.5) * 2 * (product.targetWeight * product.tolerancePercent / 100);
-    const weight = product.targetWeight + variance + (Math.random() > 0.9 ? (Math.random() > 0.5 ? 20 : -20) : 0);
+    const variance = (Math.random() - 0.5) * 2 * (targetWeight * tolerance / 100);
+    const weight = targetWeight + variance + (Math.random() > 0.9 ? (Math.random() > 0.5 ? 20 : -20) : 0);
     
     let status: 'ok' | 'underweight' | 'overweight' = 'ok';
-    if (weight < product.minWeight) status = 'underweight';
-    else if (weight > product.maxWeight) status = 'overweight';
+    if (weight < minWeight) status = 'underweight';
+    else if (weight > maxWeight) status = 'overweight';
+    
+    const capturedAt = new Date(now - (count - i) * 5000).toISOString();
     
     items.push({
       id: `item-${taskId}-${i}`,
+      task_id: taskId,
       taskId,
       weight: Math.round(weight * 10) / 10,
       status,
-      capturedAt: new Date(now - (count - i) * 5000).toISOString(),
+      captured_at: capturedAt,
+      capturedAt,
       sequence: i + 1,
     });
   }
@@ -120,26 +128,41 @@ const task2Items = generateMockItems(12, 'task-2', mockProducts[2]);
 export const mockTasks: ProductionTask[] = [
   {
     id: 'task-1',
+    line_id: 'line-1',
     lineId: 'line-1',
+    product_id: 'prod-1',
     productId: 'prod-1',
     product: mockProducts[0],
+    operator_id: 'user-op-1',
     operatorId: 'user-op-1',
     operator: mockUsers[2],
+    status: 'in_progress',
     state: 'active',
+    started_at: new Date(Date.now() - 3600000).toISOString(),
     startedAt: new Date(Date.now() - 3600000).toISOString(),
+    target_quantity: 100,
+    produced_quantity: 47,
     completedQuantity: 47,
     items: task1Items,
   },
   {
     id: 'task-2',
+    line_id: 'line-2',
     lineId: 'line-2',
+    product_id: 'prod-3',
     productId: 'prod-3',
     product: mockProducts[2],
+    operator_id: 'user-op-2',
     operatorId: 'user-op-2',
     operator: mockUsers[3],
+    status: 'paused',
     state: 'paused',
+    started_at: new Date(Date.now() - 7200000).toISOString(),
     startedAt: new Date(Date.now() - 7200000).toISOString(),
+    paused_at: new Date(Date.now() - 1800000).toISOString(),
     pausedAt: new Date(Date.now() - 1800000).toISOString(),
+    target_quantity: 50,
+    produced_quantity: 12,
     completedQuantity: 12,
     items: task2Items,
   },
@@ -151,9 +174,11 @@ export function simulateWeight(product?: Product): WeightReading {
   const status = statuses[Math.floor(Math.random() * statuses.length)] as 'stable' | 'unstable' | 'error';
   
   let value = 0;
+  const targetWeight = product?.targetWeight || product?.target_weight || 0;
+  
   if (product && status !== 'error') {
-    const variance = (Math.random() - 0.5) * 2 * (product.targetWeight * 0.15);
-    value = Math.round((product.targetWeight + variance) * 10) / 10;
+    const variance = (Math.random() - 0.5) * 2 * (targetWeight * 0.15);
+    value = Math.round((targetWeight + variance) * 10) / 10;
   } else if (status !== 'error') {
     value = Math.round((Math.random() * 500 + 50) * 10) / 10;
   }
@@ -169,17 +194,20 @@ export function simulateWeight(product?: Product): WeightReading {
 export function getLineStatus(lineId: string): LineStatus {
   const line = mockLines.find(l => l.id === lineId);
   const balance = mockBalances.find(b => b.lineId === lineId);
-  const terminal = mockTerminals.find(t => t.lineId === lineId);
-  const activeTask = mockTasks.find(t => t.lineId === lineId && (t.state === 'active' || t.state === 'paused'));
+  const terminal = mockTerminals.find(t => t.line_id === lineId || t.lineId === lineId);
+  const activeTask = mockTasks.find(t => (t.line_id === lineId || t.lineId === lineId) && (t.state === 'active' || t.state === 'paused'));
   
   // Create a default line if not found in mock data (for real database lines)
   const defaultLine: ProductionLine = line || {
     id: lineId,
     name: 'Ligne',
     code: lineId.substring(0, 8).toUpperCase(),
+    scale_url: '',
     balanceUrl: '',
+    photocell_url: '',
     photocellUrl: '',
     state: 'IDLE',
+    is_active: true,
     isActive: true,
   };
 
@@ -198,7 +226,7 @@ export function getLineStatus(lineId: string): LineStatus {
     currentWeight: simulateWeight(activeTask?.product),
     photocellState: Math.random() > 0.7 ? 1 : 0,
     activeTask,
-    lastItems: activeTask?.items.slice(-5).reverse() || [],
+    lastItems: activeTask?.items?.slice(-5).reverse() || [],
     captureState: defaultLine.state === 'RUNNING' ? 'armed' : 'idle',
   };
 }

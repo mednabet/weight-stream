@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
-import { useProducts } from '@/hooks/useProducts';
+import { useProducts } from '@/hooks/useProductionData';
 import { useSensorData } from '@/hooks/useSensorData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ interface OperatorKioskProps {
 
 export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const { user, logout } = useAuth();
-  const { products } = useProducts(true);
+  const { products } = useProducts();
 
   const [lines, setLines] = useState<Line[]>([]);
   const [lineId, setLineId] = useState<string>('');
@@ -107,7 +107,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       return;
     }
     try {
-      await apiClient.addProductionItem(activeTaskId, { weight, status: sensor.weight.status });
+      await apiClient.addProductionItem(activeTaskId, weight, sensor.weight.status || 'ok');
       await loadTasks(lineId);
       toast({ title: 'Ajouté', description: `Poids: ${weight}` });
     } catch (e: any) {
