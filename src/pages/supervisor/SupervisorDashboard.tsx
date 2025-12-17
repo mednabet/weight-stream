@@ -37,13 +37,8 @@ export function SupervisorDashboard({ embedded = false }: SupervisorDashboardPro
     localStorage.setItem('supervisor-sound-enabled', JSON.stringify(soundEnabled));
   }, [soundEnabled]);
   
-  // Enable real-time notifications
-  useRealtimeNotifications({
-    enableTaskNotifications: true,
-    enableSensorNotifications: true,
-    enableProductionAlerts: true,
-    enableSounds: soundEnabled,
-  });
+  // Enable real-time notifications (simplified for self-hosted mode)
+  useRealtimeNotifications();
 
   return (
     <div className={embedded ? "bg-background" : "min-h-screen bg-background"}>

@@ -1,31 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
-
-export interface Product {
-  id: string;
-  name: string;
-  reference: string;
-  target_weight: number;
-  tolerance_min: number;
-  tolerance_max: number;
-  created_at: string;
-}
-
-export interface ProductionLine {
-  id: string;
-  name: string;
-  status: string;
-  created_at: string;
-}
-
-export interface ProductionTask {
-  id: string;
-  product_id: string;
-  line_id: string;
-  status: string;
-  created_at: string;
-}
+import { Product, ProductionLine, ProductionTask } from '@/types/production';
 
 // Fonction utilitaire pour formater les messages d'erreur
 function formatErrorMessage(error: any, defaultMessage: string): string {
@@ -43,6 +19,9 @@ function formatErrorMessage(error: any, defaultMessage: string): string {
   
   return message || defaultMessage;
 }
+
+// Re-export types for backward compatibility
+export type { Product, ProductionLine, ProductionTask };
 
 export const useProductionData = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -217,13 +196,16 @@ export const useProductionData = () => {
 export const useProducts = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const { toast } = useToast();
 
   const fetchProducts = async () => {
     try {
       const data = await apiClient.getProducts();
       setProducts(data as any);
+      setError(null);
     } catch (e: any) {
+      setError(e);
       toast({ 
         title: 'Erreur de chargement', 
         description: formatErrorMessage(e, 'Impossible de charger les produits. Veuillez réessayer.'), 
@@ -292,6 +274,7 @@ export const useProducts = () => {
   return {
     products,
     loading,
+    error,
     refetch: fetchProducts,
     createProduct,
     updateProduct,

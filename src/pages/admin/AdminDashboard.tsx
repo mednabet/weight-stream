@@ -410,7 +410,7 @@ export function AdminDashboard() {
             <span className="text-sm font-normal text-muted-foreground">({supervisors.length})</span>
           </h2>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={refetch} disabled={isLoading}>
+            <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
               <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
             </Button>
             <Button onClick={() => openCreateUserDialog('supervisor')} className="gap-2" variant="outline">
@@ -422,7 +422,7 @@ export function AdminDashboard() {
 
         {error && (
           <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
-            {error}
+            {error.message || 'Une erreur est survenue'}
           </div>
         )}
 

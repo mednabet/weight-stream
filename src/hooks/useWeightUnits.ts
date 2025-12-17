@@ -54,6 +54,10 @@ export function useWeightUnits() {
     fetchUnits();
   }, [fetchUnits]);
 
+  const getDefaultUnit = useCallback((): WeightUnit | undefined => {
+    return units.find(u => u.is_default) || units[0];
+  }, [units]);
+
   const createUnit = async (data: Omit<WeightUnit, 'id' | 'created_at'>): Promise<boolean> => {
     try {
       await apiClient.createWeightUnit(data);
@@ -123,6 +127,7 @@ export function useWeightUnits() {
     updateUnit,
     deleteUnit,
     setDefaultUnit,
+    getDefaultUnit,
     // Alias pour compatibilité
     weightUnits: units,
     refetch: fetchUnits,

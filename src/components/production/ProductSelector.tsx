@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Package, Check, Scale, Loader2, AlertCircle } from 'lucide-react';
-import { useProducts } from '@/hooks/useProducts';
+import { useProducts } from '@/hooks/useProductionData';
 
 interface ProductSelectorProps {
   selectedProduct?: Product;

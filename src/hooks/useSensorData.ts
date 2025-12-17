@@ -100,7 +100,7 @@ async function fetchSensorViaProxy(url: string): Promise<{ data?: string; error?
 export function useSensorData(config: SensorConfig): UseSensorDataResult {
   const { scaleUrl, photocellUrl, pollingInterval = 200 } = config;
   
-  const [weight, setWeight] = useState<WeightReading>({ value: 0, status: 'disconnected' });
+  const [weight, setWeight] = useState<WeightReading>({ value: 0, status: 'offline', timestamp: Date.now() });
   const [photocellState, setPhotocellState] = useState<PhotocellState>(0);
   const [isScaleConnected, setIsScaleConnected] = useState(false);
   const [isPhotocellConnected, setIsPhotocellConnected] = useState(false);
@@ -114,16 +114,16 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
       const result = await fetchSensorViaProxy(scaleUrl);
       if (result.data) {
         const parsed = parseWeight(result.data);
-        setWeight(parsed);
+        setWeight({ ...parsed, timestamp: Date.now() });
         setIsScaleConnected(parsed.status !== 'error');
         setErrors(prev => ({ ...prev, scale: undefined }));
       } else {
-        setWeight({ value: 0, status: 'disconnected' });
+        setWeight({ value: 0, status: 'offline', timestamp: Date.now() });
         setIsScaleConnected(false);
         setErrors(prev => ({ ...prev, scale: result.error }));
       }
     } else {
-      setWeight({ value: 0, status: 'disconnected' });
+      setWeight({ value: 0, status: 'offline', timestamp: Date.now() });
       setIsScaleConnected(false);
     }
     
