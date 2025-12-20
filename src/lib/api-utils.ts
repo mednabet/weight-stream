@@ -1,22 +1,23 @@
-import { toast } from '@/hooks/use-toast';
+/**
+ * API utilities for the self-hosted MySQL backend.
+ * All external API calls should go through apiClient.
+ */
 
-interface InvokeOptions {
-  body?: Record<string, unknown>;
-  redirectOnUnauthorized?: boolean;
+// This file is kept for backward compatibility.
+// Edge functions are not available in self-hosted MySQL mode.
+// Use apiClient from @/lib/api-client for all API calls.
+
+export function logApiError(context: string, error: unknown): void {
+  console.error(`[API Error - ${context}]:`, error);
 }
 
-/**
- * Supabase edge functions removed in MySQL mode.
- * Kept for compatibility; always returns an error.
- */
-export async function invokeEdgeFunction<T = unknown>(
-  functionName: string,
-  _options: InvokeOptions = {}
-): Promise<{ data: T | null; error: string | null }> {
-  toast({
-    title: 'Fonction indisponible',
-    description: `Edge function "${functionName}" n'est plus utilisée (mode MySQL).`,
-    variant: 'destructive',
-  });
-  return { data: null, error: 'EDGE_FUNCTIONS_DISABLED' };
+export function handleApiResponse<T>(
+  response: { data?: T; error?: string | null },
+  context: string
+): T | null {
+  if (response.error) {
+    logApiError(context, response.error);
+    return null;
+  }
+  return response.data ?? null;
 }

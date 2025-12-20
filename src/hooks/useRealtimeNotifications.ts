@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export interface Notification {
   id: string;
@@ -9,15 +9,33 @@ export interface Notification {
 }
 
 /**
- * Supabase realtime has been removed in MySQL mode.
- * This hook currently returns an empty list (you can later replace it with WebSocket/SSE).
+ * Hook for managing notifications in MySQL mode.
+ * This can be extended later with WebSocket/SSE for real-time updates.
  */
 export function useRealtimeNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  useEffect(() => {
+  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'createdAt'>) => {
+    const newNotification: Notification = {
+      ...notification,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+    };
+    setNotifications(prev => [newNotification, ...prev].slice(0, 50));
+  }, []);
+
+  const removeNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const clearNotifications = useCallback(() => {
     setNotifications([]);
   }, []);
 
-  return { notifications };
+  return {
+    notifications,
+    addNotification,
+    removeNotification,
+    clearNotifications,
+  };
 }
