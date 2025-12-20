@@ -352,7 +352,7 @@ export default function InitialSetup() {
                   <Label>Fournisseur d'authentification</Label>
                   <Select
                     value={config.auth.provider}
-                    onValueChange={(provider: 'supabase' | 'custom' | 'oauth') => setConfig(prev => ({
+                    onValueChange={(provider: 'jwt' | 'oauth') => setConfig(prev => ({
                       ...prev,
                       auth: { ...prev.auth, provider },
                     }))}
@@ -361,8 +361,7 @@ export default function InitialSetup() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="supabase">Supabase Auth (défaut)</SelectItem>
-                      <SelectItem value="custom">Authentification personnalisée</SelectItem>
+                      <SelectItem value="jwt">JWT (défaut)</SelectItem>
                       <SelectItem value="oauth">OAuth 2.0 / OIDC</SelectItem>
                     </SelectContent>
                   </Select>
