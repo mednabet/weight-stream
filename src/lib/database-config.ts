@@ -25,7 +25,7 @@ export interface AppConfig {
     timezone: string;
   };
   auth: {
-    provider: 'supabase' | 'custom' | 'oauth';
+    provider: 'jwt' | 'oauth';
     sessionTimeout: number; // in minutes
   };
   initialized: boolean;
@@ -51,7 +51,7 @@ export const defaultConfig: AppConfig = {
     timezone: 'Europe/Paris',
   },
   auth: {
-    provider: 'supabase',
+    provider: 'jwt',
     sessionTimeout: 480, // 8 hours
   },
   initialized: false,
