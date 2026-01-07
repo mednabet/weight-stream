@@ -49,16 +49,18 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 // Auth redirect component - redirects authenticated users based on role
 function AuthRedirect({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, role, isLoading } = useAuth();
-  
+
+  // IMPORTANT: don't block rendering the login page while auth is initializing.
+  // If the user is already logged in, the redirect will happen as soon as the role is loaded.
   if (isLoading) {
-    return <LoadingScreen />;
+    return <>{children}</>;
   }
-  
+
   if (isAuthenticated && role) {
     const redirectPath = role === 'operator' ? '/operator' : role === 'admin' ? '/admin' : '/supervisor';
     return <Navigate to={redirectPath} replace />;
   }
-  
+
   return <>{children}</>;
 }
 
