@@ -34,13 +34,13 @@ productsRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReq
     const id = uuidv4();
     await query(
       `INSERT INTO products (id, reference, name, target_weight, tolerance_min, tolerance_max, weight_unit_id) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, reference, name, target_weight, tolerance_min || 0, tolerance_max || 0, weight_unit_id]
     );
 
     res.json({ id, reference, name, target_weight, tolerance_min, tolerance_max, weight_unit_id });
   } catch (err: any) {
-    if (err.code === 'ER_DUP_ENTRY') {
+    if (err.code === '23505') { // PostgreSQL unique violation
       return res.status(400).json({ error: 'Référence déjà utilisée' });
     }
     console.error('Create product error:', err);
@@ -55,8 +55,8 @@ productsRouter.put('/:id', requireRole('admin', 'supervisor'), async (req: AuthR
 
   try {
     await query(
-      `UPDATE products SET reference = ?, name = ?, target_weight = ?, tolerance_min = ?, 
-       tolerance_max = ?, weight_unit_id = ?, is_active = ? WHERE id = ?`,
+      `UPDATE products SET reference = $1, name = $2, target_weight = $3, tolerance_min = $4, 
+       tolerance_max = $5, weight_unit_id = $6, is_active = $7 WHERE id = $8`,
       [reference, name, target_weight, tolerance_min, tolerance_max, weight_unit_id, is_active, id]
     );
     res.json({ success: true });
@@ -71,7 +71,7 @@ productsRouter.delete('/:id', requireRole('admin', 'supervisor'), async (req: Au
   const { id } = req.params;
 
   try {
-    await query('DELETE FROM products WHERE id = ?', [id]);
+    await query('DELETE FROM products WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete product error:', err);

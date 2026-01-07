@@ -48,6 +48,10 @@ export default function InitialSetup() {
   };
 
   const handleDatabaseTypeChange = (type: DatabaseType) => {
+    // Only PostgreSQL is supported for private server deployment
+    if (type !== 'postgresql') {
+      return;
+    }
     updateDatabaseConfig({
       type,
       port: defaultPorts[type],

@@ -33,13 +33,13 @@ weightUnitsRouter.post('/', requireRole('admin'), async (req: AuthRequest, res: 
 
     const id = uuidv4();
     await query(
-      'INSERT INTO weight_units (id, code, name, symbol, decimal_precision, is_default) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO weight_units (id, code, name, symbol, decimal_precision, is_default) VALUES ($1, $2, $3, $4, $5, $6)',
       [id, code, name, symbol, decimal_precision || 3, is_default || false]
     );
 
     res.json({ id, code, name, symbol, decimal_precision, is_default });
   } catch (err: any) {
-    if (err.code === 'ER_DUP_ENTRY') {
+    if (err.code === '23505') { // PostgreSQL unique violation
       return res.status(400).json({ error: 'Code déjà utilisé' });
     }
     console.error('Create weight unit error:', err);
@@ -58,7 +58,7 @@ weightUnitsRouter.put('/:id', requireRole('admin'), async (req: AuthRequest, res
     }
 
     await query(
-      'UPDATE weight_units SET code = ?, name = ?, symbol = ?, decimal_precision = ?, is_default = ? WHERE id = ?',
+      'UPDATE weight_units SET code = $1, name = $2, symbol = $3, decimal_precision = $4, is_default = $5 WHERE id = $6',
       [code, name, symbol, decimal_precision, is_default, id]
     );
     res.json({ success: true });
@@ -73,7 +73,7 @@ weightUnitsRouter.delete('/:id', requireRole('admin'), async (req: AuthRequest, 
   const { id } = req.params;
 
   try {
-    await query('DELETE FROM weight_units WHERE id = ?', [id]);
+    await query('DELETE FROM weight_units WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete weight unit error:', err);

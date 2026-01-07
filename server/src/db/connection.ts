@@ -1,21 +1,23 @@
-import mysql from 'mysql2/promise';
+import pg from 'pg';
 import dotenv from 'dotenv';
 import { loadAppConfig, DbConfig } from '../config/app-config.js';
 
 dotenv.config();
 
-let pool: mysql.Pool | null = null;
+const { Pool } = pg;
 
-function buildPool(db: DbConfig): mysql.Pool {
-  return mysql.createPool({
+let pool: pg.Pool | null = null;
+
+function buildPool(db: DbConfig): pg.Pool {
+  return new Pool({
     host: db.host,
     port: db.port,
     user: db.username,
     password: db.password,
     database: db.database,
-    waitForConnections: true,
-    connectionLimit: db.connectionLimit ?? 10,
-    queueLimit: 0,
+    max: db.connectionLimit ?? 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
     ssl: db.ssl ? { rejectUnauthorized: false } : undefined,
   });
 }
@@ -29,8 +31,8 @@ export async function initPoolFromConfig(): Promise<void> {
   if (!cfg) return;
   pool = buildPool(cfg.db);
   // Validate connection quickly
-  const c = await pool.getConnection();
-  c.release();
+  const client = await pool.connect();
+  client.release();
 }
 
 export async function reinitPool(db: DbConfig): Promise<void> {
@@ -38,11 +40,11 @@ export async function reinitPool(db: DbConfig): Promise<void> {
     try { await pool.end(); } catch { /* ignore */ }
   }
   pool = buildPool(db);
-  const c = await pool.getConnection();
-  c.release();
+  const client = await pool.connect();
+  client.release();
 }
 
-export function getPool(): mysql.Pool {
+export function getPool(): pg.Pool {
   if (!pool) {
     throw new Error('DATABASE_NOT_CONFIGURED');
   }
@@ -51,6 +53,6 @@ export function getPool(): mysql.Pool {
 
 export async function query<T>(sql: string, params?: any[]): Promise<T> {
   const p = getPool();
-  const [results] = await p.execute(sql, params);
-  return results as T;
+  const result = await p.query(sql, params);
+  return result.rows as T;
 }
