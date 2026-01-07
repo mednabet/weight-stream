@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { supabase } from '@/integrations/supabase/client';
 import { UserRole } from '@/types/production';
 
 export interface UserWithRole {
@@ -20,17 +20,22 @@ export function useUsers(filterRole?: string) {
   const { data: users = [], isLoading, error, refetch } = useQuery({
     queryKey: ['users', filterRole],
     queryFn: async () => {
-      const data = await apiClient.getUsers();
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('*');
+      
+      if (error) throw new Error(error.message);
+      
       let result = (data as any[]).map((u) => ({
-        id: u.id,
-        email: u.email,
-        role: u.role,
-        is_active: !!u.is_active,
-        banned: !u.is_active,
+        id: u.user_id,
+        email: u.user_id, // Note: We don't have access to auth.users email
+        role: u.role as UserRole,
+        is_active: true,
+        banned: false,
         created_at: u.created_at,
         createdAt: u.created_at,
-        lastSignIn: u.last_sign_in || null,
-        last_sign_in: u.last_sign_in || null,
+        lastSignIn: null,
+        last_sign_in: null,
       })) as UserWithRole[];
       
       if (filterRole) {
@@ -41,51 +46,40 @@ export function useUsers(filterRole?: string) {
     },
   });
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: async ({ userId, banned }: { userId: string; banned: boolean }) => {
-      await apiClient.toggleUserStatus(userId, !banned);
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: UserRole }) => {
+      const { error } = await supabase
+        .from('user_roles')
+        .update({ role })
+        .eq('user_id', userId);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-    },
-  });
-
-  const deleteUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      await apiClient.deleteUser(userId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-    },
-  });
-
-  const resetPasswordMutation = useMutation({
-    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
-      await apiClient.resetUserPassword(userId, password);
     },
   });
 
   const toggleUserStatus = async (userId: string, banned: boolean): Promise<boolean> => {
-    try {
-      await toggleStatusMutation.mutateAsync({ userId, banned });
-      return true;
-    } catch {
-      return false;
-    }
+    // Not available with Supabase RLS - would need edge function
+    console.warn('toggleUserStatus not available in Supabase mode');
+    return false;
   };
 
   const deleteUser = async (userId: string): Promise<boolean> => {
-    try {
-      await deleteUserMutation.mutateAsync(userId);
-      return true;
-    } catch {
-      return false;
-    }
+    // Not available with Supabase RLS - would need edge function
+    console.warn('deleteUser not available in Supabase mode');
+    return false;
   };
 
   const resetUserPassword = async (userId: string, password: string): Promise<boolean> => {
+    // Not available with Supabase RLS - would need edge function
+    console.warn('resetUserPassword not available in Supabase mode');
+    return false;
+  };
+
+  const updateUserRole = async (userId: string, role: UserRole): Promise<boolean> => {
     try {
-      await resetPasswordMutation.mutateAsync({ userId, password });
+      await updateRoleMutation.mutateAsync({ userId, role });
       return true;
     } catch {
       return false;
@@ -101,5 +95,6 @@ export function useUsers(filterRole?: string) {
     toggleUserStatus,
     deleteUser,
     resetUserPassword,
+    updateUserRole,
   };
 }

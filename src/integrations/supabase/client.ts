@@ -1,15 +1,7 @@
-/**
- * DEPRECATED: This file is kept for compatibility only.
- * The application now uses MySQL with the Express backend.
- * All API calls should use apiClient from @/lib/api-client.
- * 
- * DO NOT import this file in new code.
- */
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from './types';
 
-// Stub export to prevent import errors
-export const supabase = null;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-console.warn(
-  '[DEPRECATED] supabase client is no longer used. ' +
-  'This application runs on MySQL. Use apiClient from @/lib/api-client instead.'
-);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
