@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
-import mysql from 'mysql2/promise';
+import pg from 'pg';
 import { isConfigured, saveAppConfig, DbConfig } from '../config/app-config.js';
 import { reinitPool } from '../db/connection.js';
 import { initDatabase } from '../db/init.js';
+
+const { Client } = pg;
 
 export const setupRouter = Router();
 
@@ -19,7 +21,7 @@ setupRouter.post('/test', async (req: Request, res: Response) => {
   }
 
   try {
-    const conn = await mysql.createConnection({
+    const client = new Client({
       host: db.host,
       port: db.port,
       user: db.username,
@@ -27,8 +29,9 @@ setupRouter.post('/test', async (req: Request, res: Response) => {
       database: db.database,
       ssl: db.ssl ? { rejectUnauthorized: false } : undefined,
     });
-    await conn.ping();
-    await conn.end();
+    await client.connect();
+    await client.query('SELECT 1');
+    await client.end();
     return res.json({ success: true });
   } catch (e: any) {
     return res.status(400).json({ success: false, error: e?.message || 'Connexion impossible' });
@@ -45,7 +48,7 @@ setupRouter.post('/apply', async (req: Request, res: Response) => {
   try {
     // Persist config
     saveAppConfig({
-      type: 'mysql',
+      type: 'postgresql',
       host: db.host,
       port: db.port,
       database: db.database,
@@ -57,7 +60,7 @@ setupRouter.post('/apply', async (req: Request, res: Response) => {
 
     // Reinitialize pool and create tables
     await reinitPool({
-      type: 'mysql',
+      type: 'postgresql',
       host: db.host,
       port: db.port,
       database: db.database,

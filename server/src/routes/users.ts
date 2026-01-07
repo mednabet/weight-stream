@@ -63,7 +63,7 @@ usersRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
 
   try {
     const existing = await query<any[]>(
-      'SELECT id FROM users WHERE email = ?',
+      'SELECT id FROM users WHERE email = $1',
       [email]
     );
 
@@ -75,12 +75,12 @@ usersRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
     const passwordHash = await bcrypt.hash(password, 10);
 
     await query(
-      'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
+      'INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)',
       [userId, email, passwordHash]
     );
 
     await query(
-      'INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)',
+      'INSERT INTO user_roles (id, user_id, role) VALUES ($1, $2, $3)',
       [uuidv4(), userId, role || 'operator']
     );
 
@@ -102,7 +102,7 @@ usersRouter.put('/:id/role', requireRole('admin'), async (req: AuthRequest, res:
 
   try {
     await query(
-      'UPDATE user_roles SET role = ? WHERE user_id = ?',
+      'UPDATE user_roles SET role = $1 WHERE user_id = $2',
       [role, id]
     );
     res.json({ success: true });
@@ -123,7 +123,7 @@ usersRouter.put('/:id/status', requireRole('admin', 'supervisor'), async (req: A
 
   try {
     await query(
-      'UPDATE users SET is_active = ? WHERE id = ?',
+      'UPDATE users SET is_active = $1 WHERE id = $2',
       [is_active, id]
     );
     res.json({ success: true });
@@ -151,7 +151,7 @@ usersRouter.put('/:id/password', requireRole('admin', 'supervisor'), async (req:
   try {
     const passwordHash = await bcrypt.hash(password, 10);
     await query(
-      'UPDATE users SET password_hash = ? WHERE id = ?',
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
       [passwordHash, id]
     );
     res.json({ success: true });
@@ -170,7 +170,7 @@ usersRouter.delete('/:id', requireRole('admin', 'supervisor'), async (req: AuthR
   }
 
   try {
-    await query('DELETE FROM users WHERE id = ?', [id]);
+    await query('DELETE FROM users WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete user error:', err);

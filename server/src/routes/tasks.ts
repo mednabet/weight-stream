@@ -35,7 +35,7 @@ tasksRouter.get('/line/:lineId', async (req: AuthRequest, res: Response) => {
              p.target_weight, p.tolerance_min, p.tolerance_max
       FROM production_tasks pt
       LEFT JOIN products p ON pt.product_id = p.id
-      WHERE pt.line_id = ?
+      WHERE pt.line_id = $1
       ORDER BY pt.created_at DESC
     `, [lineId]);
     res.json(tasks);
@@ -57,7 +57,7 @@ tasksRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
     const id = uuidv4();
     await query(
       `INSERT INTO production_tasks (id, line_id, product_id, target_quantity, operator_id) 
-       VALUES (?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5)`,
       [id, line_id, product_id, target_quantity, operator_id]
     );
 
@@ -84,8 +84,8 @@ tasksRouter.put('/:id/status', async (req: AuthRequest, res: Response) => {
     }
 
     await query(
-      `UPDATE production_tasks SET status = ?, started_at = COALESCE(?, started_at), 
-       completed_at = COALESCE(?, completed_at), operator_id = COALESCE(?, operator_id) WHERE id = ?`,
+      `UPDATE production_tasks SET status = $1, started_at = COALESCE($2, started_at), 
+       completed_at = COALESCE($3, completed_at), operator_id = COALESCE($4, operator_id) WHERE id = $5`,
       [status, updates.started_at, updates.completed_at, updates.operator_id, id]
     );
     res.json({ success: true });
@@ -102,21 +102,21 @@ tasksRouter.post('/:id/items', async (req: AuthRequest, res: Response) => {
 
   try {
     // Get current sequence
-    const [seqResult] = await query<any[]>(
-      'SELECT COALESCE(MAX(sequence), 0) + 1 as next_seq FROM production_items WHERE task_id = ?',
+    const seqResult = await query<any[]>(
+      'SELECT COALESCE(MAX(sequence), 0) + 1 as next_seq FROM production_items WHERE task_id = $1',
       [id]
     );
-    const sequence = seqResult.next_seq;
+    const sequence = parseInt(seqResult[0].next_seq);
 
     const itemId = uuidv4();
     await query(
-      'INSERT INTO production_items (id, task_id, sequence, weight, status) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO production_items (id, task_id, sequence, weight, status) VALUES ($1, $2, $3, $4, $5)',
       [itemId, id, sequence, weight, status]
     );
 
     // Update produced quantity
     await query(
-      'UPDATE production_tasks SET produced_quantity = produced_quantity + 1 WHERE id = ?',
+      'UPDATE production_tasks SET produced_quantity = produced_quantity + 1 WHERE id = $1',
       [id]
     );
 
@@ -133,7 +133,7 @@ tasksRouter.get('/:id/items', async (req: AuthRequest, res: Response) => {
 
   try {
     const items = await query<any[]>(
-      'SELECT * FROM production_items WHERE task_id = ? ORDER BY sequence DESC',
+      'SELECT * FROM production_items WHERE task_id = $1 ORDER BY sequence DESC',
       [id]
     );
     res.json(items);
@@ -148,8 +148,8 @@ tasksRouter.delete('/:id', requireRole('admin', 'supervisor'), async (req: AuthR
   const { id } = req.params;
 
   try {
-    await query('DELETE FROM production_items WHERE task_id = ?', [id]);
-    await query('DELETE FROM production_tasks WHERE id = ?', [id]);
+    await query('DELETE FROM production_items WHERE task_id = $1', [id]);
+    await query('DELETE FROM production_tasks WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete task error:', err);
