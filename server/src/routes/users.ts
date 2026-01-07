@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/connection.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { validatePassword, validateEmail } from '../middleware/validation.js';
 
 export const usersRouter = Router();
 usersRouter.use(authenticate);
@@ -36,6 +37,18 @@ usersRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email et mot de passe requis' });
+  }
+
+  // Validate email format
+  const emailValidation = validateEmail(email);
+  if (!emailValidation.valid) {
+    return res.status(400).json({ error: emailValidation.error });
+  }
+
+  // Validate password strength
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.valid) {
+    return res.status(400).json({ error: passwordValidation.error });
   }
 
   // Supervisors can only create operators
@@ -125,8 +138,14 @@ usersRouter.put('/:id/password', requireRole('admin', 'supervisor'), async (req:
   const { id } = req.params;
   const { password } = req.body;
 
-  if (!password || password.length < 6) {
-    return res.status(400).json({ error: 'Mot de passe minimum 6 caractères' });
+  if (!password) {
+    return res.status(400).json({ error: 'Mot de passe requis' });
+  }
+
+  // Validate password strength
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.valid) {
+    return res.status(400).json({ error: passwordValidation.error });
   }
 
   try {

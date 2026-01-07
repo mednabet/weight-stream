@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/connection.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { validatePassword, validateEmail } from '../middleware/validation.js';
 
 export const authRouter = Router();
 
@@ -69,8 +70,16 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email et mot de passe requis' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Mot de passe minimum 6 caractères' });
+  // Validate email format
+  const emailValidation = validateEmail(email);
+  if (!emailValidation.valid) {
+    return res.status(400).json({ error: emailValidation.error });
+  }
+
+  // Validate password strength
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.valid) {
+    return res.status(400).json({ error: passwordValidation.error });
   }
 
   try {
