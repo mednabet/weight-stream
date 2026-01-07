@@ -1,60 +1,24 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { useLocation } from 'react-router-dom';
 
 /**
- * Hook to check if the user is authenticated with Supabase
+ * Hook to check setup status - simplified for Supabase mode
  */
 export function useSetupCheck() {
-  const [isChecking, setIsChecking] = useState(true);
-  const navigate = useNavigate();
+  const [isChecking, setIsChecking] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
-    let cancelled = false;
+    // In Supabase mode, setup is always complete
+    setIsChecking(false);
+  }, [location.pathname]);
 
-    // Allow login and signup pages without checking
-    if (location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/setup') {
-      setIsChecking(false);
-      return;
-    }
-
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (cancelled) return;
-
-      // Redirect to login if not authenticated
-      if (!session) {
-        navigate('/login', { replace: true });
-      }
-      
-      setIsChecking(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate, location.pathname]);
-
-  return { isChecking, backendAvailable: true };
+  return { isChecking: false, backendAvailable: true };
 }
 
 /**
- * Provider component to wrap the app and perform setup check
+ * Provider component - just renders children in Supabase mode
  */
 export function SetupCheckProvider({ children }: { children: React.ReactNode }) {
-  const { isChecking } = useSetupCheck();
-
-  if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground text-sm">Chargement...</p>
-        </div>
-      </div>
-    );
-  }
-
   return <>{children}</>;
 }
