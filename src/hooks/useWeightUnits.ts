@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '@/lib/api-client';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
 export interface WeightUnit {
@@ -12,21 +12,6 @@ export interface WeightUnit {
   created_at?: string;
 }
 
-// Fonction utilitaire pour formater les messages d'erreur
-function formatErrorMessage(error: any, defaultMessage: string): string {
-  const message = error?.message || '';
-  
-  if (message.includes('serveur') || message.includes('connexion') || message.includes('réseau')) {
-    return message;
-  }
-  
-  if (message.toLowerCase().includes('fetch')) {
-    return 'Impossible de contacter le serveur. Vérifiez votre connexion réseau.';
-  }
-  
-  return message || defaultMessage;
-}
-
 export function useWeightUnits() {
   const [units, setUnits] = useState<WeightUnit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,13 +21,18 @@ export function useWeightUnits() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.getWeightUnits();
+      const { data, error: fetchError } = await supabase
+        .from('weight_units')
+        .select('*')
+        .order('name');
+      
+      if (fetchError) throw new Error(fetchError.message);
       setUnits(data as WeightUnit[]);
     } catch (e: any) {
       setError(e);
       toast({
         title: 'Erreur de chargement',
-        description: formatErrorMessage(e, 'Impossible de charger les unités de poids.'),
+        description: e.message || 'Impossible de charger les unités de poids.',
         variant: 'destructive',
       });
     } finally {
@@ -60,13 +50,14 @@ export function useWeightUnits() {
 
   const createUnit = async (data: Omit<WeightUnit, 'id' | 'created_at'>): Promise<boolean> => {
     try {
-      await apiClient.createWeightUnit(data);
+      const { error } = await supabase.from('weight_units').insert(data);
+      if (error) throw new Error(error.message);
       await fetchUnits();
       return true;
     } catch (e: any) {
       toast({
         title: 'Erreur de création',
-        description: formatErrorMessage(e, 'Impossible de créer l\'unité de poids.'),
+        description: e.message || 'Impossible de créer l\'unité de poids.',
         variant: 'destructive',
       });
       return false;
@@ -75,13 +66,14 @@ export function useWeightUnits() {
 
   const updateUnit = async (id: string, data: Partial<WeightUnit>): Promise<boolean> => {
     try {
-      await apiClient.updateWeightUnit(id, data);
+      const { error } = await supabase.from('weight_units').update(data).eq('id', id);
+      if (error) throw new Error(error.message);
       await fetchUnits();
       return true;
     } catch (e: any) {
       toast({
         title: 'Erreur de modification',
-        description: formatErrorMessage(e, 'Impossible de modifier l\'unité de poids.'),
+        description: e.message || 'Impossible de modifier l\'unité de poids.',
         variant: 'destructive',
       });
       return false;
@@ -90,13 +82,14 @@ export function useWeightUnits() {
 
   const deleteUnit = async (id: string): Promise<boolean> => {
     try {
-      await apiClient.deleteWeightUnit(id);
+      const { error } = await supabase.from('weight_units').delete().eq('id', id);
+      if (error) throw new Error(error.message);
       await fetchUnits();
       return true;
     } catch (e: any) {
       toast({
         title: 'Erreur de suppression',
-        description: formatErrorMessage(e, 'Impossible de supprimer l\'unité de poids.'),
+        description: e.message || 'Impossible de supprimer l\'unité de poids.',
         variant: 'destructive',
       });
       return false;
@@ -105,13 +98,17 @@ export function useWeightUnits() {
 
   const setDefaultUnit = async (id: string): Promise<boolean> => {
     try {
-      await apiClient.updateWeightUnit(id, { is_default: true });
+      // First, unset all defaults
+      await supabase.from('weight_units').update({ is_default: false }).neq('id', id);
+      // Then set the new default
+      const { error } = await supabase.from('weight_units').update({ is_default: true }).eq('id', id);
+      if (error) throw new Error(error.message);
       await fetchUnits();
       return true;
     } catch (e: any) {
       toast({
         title: 'Erreur',
-        description: formatErrorMessage(e, 'Impossible de définir l\'unité par défaut.'),
+        description: e.message || 'Impossible de définir l\'unité par défaut.',
         variant: 'destructive',
       });
       return false;
@@ -128,7 +125,6 @@ export function useWeightUnits() {
     deleteUnit,
     setDefaultUnit,
     getDefaultUnit,
-    // Alias pour compatibilité
     weightUnits: units,
     refetch: fetchUnits,
   };

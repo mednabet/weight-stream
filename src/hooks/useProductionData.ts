@@ -1,24 +1,7 @@
 import { useState, useEffect } from 'react';
-import { apiClient } from '@/lib/api-client';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Product, ProductionLine, ProductionTask } from '@/types/production';
-
-// Fonction utilitaire pour formater les messages d'erreur
-function formatErrorMessage(error: any, defaultMessage: string): string {
-  const message = error?.message || '';
-  
-  // Si le message est déjà formaté par api-client, le retourner tel quel
-  if (message.includes('serveur') || message.includes('connexion') || message.includes('réseau')) {
-    return message;
-  }
-  
-  // Messages par défaut
-  if (message.toLowerCase().includes('fetch')) {
-    return 'Impossible de contacter le serveur. Vérifiez votre connexion réseau.';
-  }
-  
-  return message || defaultMessage;
-}
 
 // Re-export types for backward compatibility
 export type { Product, ProductionLine, ProductionTask };
@@ -32,12 +15,15 @@ export const useProductionData = () => {
 
   const fetchProducts = async () => {
     try {
-      const data = await apiClient.getProducts();
+      const { data, error } = await supabase
+        .from('products')
+        .select('*, weight_unit:weight_units(*)');
+      if (error) throw new Error(error.message);
       setProducts(data as any);
     } catch (e: any) {
       toast({ 
         title: 'Erreur de chargement', 
-        description: formatErrorMessage(e, 'Impossible de charger les produits. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de charger les produits.', 
         variant: 'destructive' 
       });
     }
@@ -45,12 +31,15 @@ export const useProductionData = () => {
 
   const fetchLines = async () => {
     try {
-      const data = await apiClient.getLines();
+      const { data, error } = await supabase
+        .from('production_lines')
+        .select('*, weight_unit:weight_units(*)');
+      if (error) throw new Error(error.message);
       setLines(data as any);
     } catch (e: any) {
       toast({ 
         title: 'Erreur de chargement', 
-        description: formatErrorMessage(e, 'Impossible de charger les lignes de production. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de charger les lignes de production.', 
         variant: 'destructive' 
       });
     }
@@ -58,12 +47,15 @@ export const useProductionData = () => {
 
   const fetchTasks = async () => {
     try {
-      const data = await apiClient.getTasks();
+      const { data, error } = await supabase
+        .from('production_tasks')
+        .select('*, product:products(*), line:production_lines(*)');
+      if (error) throw new Error(error.message);
       setTasks(data as any);
     } catch (e: any) {
       toast({ 
         title: 'Erreur de chargement', 
-        description: formatErrorMessage(e, 'Impossible de charger les tâches. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de charger les tâches.', 
         variant: 'destructive' 
       });
     }
@@ -80,14 +72,15 @@ export const useProductionData = () => {
 
   const createProduct = async (product: any) => {
     try {
-      await apiClient.createProduct(product);
+      const { error } = await supabase.from('products').insert(product);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'Le produit a été créé avec succès.' });
       await fetchProducts();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de création', 
-        description: formatErrorMessage(e, 'Impossible de créer le produit. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de créer le produit.', 
         variant: 'destructive' 
       });
       return false;
@@ -96,14 +89,15 @@ export const useProductionData = () => {
 
   const updateProduct = async (id: string, updates: any) => {
     try {
-      await apiClient.updateProduct(id, updates);
+      const { error } = await supabase.from('products').update(updates).eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'Le produit a été modifié avec succès.' });
       await fetchProducts();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de modification', 
-        description: formatErrorMessage(e, 'Impossible de modifier le produit. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de modifier le produit.', 
         variant: 'destructive' 
       });
       return false;
@@ -112,14 +106,15 @@ export const useProductionData = () => {
 
   const createLine = async (line: any) => {
     try {
-      await apiClient.createLine(line);
+      const { error } = await supabase.from('production_lines').insert(line);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La ligne de production a été créée avec succès.' });
       await fetchLines();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de création', 
-        description: formatErrorMessage(e, 'Impossible de créer la ligne. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de créer la ligne.', 
         variant: 'destructive' 
       });
       return false;
@@ -128,14 +123,15 @@ export const useProductionData = () => {
 
   const updateLine = async (id: string, updates: any) => {
     try {
-      await apiClient.updateLine(id, updates);
+      const { error } = await supabase.from('production_lines').update(updates).eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La ligne de production a été modifiée avec succès.' });
       await fetchLines();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de modification', 
-        description: formatErrorMessage(e, 'Impossible de modifier la ligne. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de modifier la ligne.', 
         variant: 'destructive' 
       });
       return false;
@@ -144,14 +140,15 @@ export const useProductionData = () => {
 
   const createTask = async (task: any) => {
     try {
-      await apiClient.createTask(task);
+      const { error } = await supabase.from('production_tasks').insert(task);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La tâche de production a été créée avec succès.' });
       await fetchTasks();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de création', 
-        description: formatErrorMessage(e, 'Impossible de créer la tâche. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de créer la tâche.', 
         variant: 'destructive' 
       });
       return false;
@@ -160,14 +157,15 @@ export const useProductionData = () => {
 
   const updateTask = async (id: string, updates: any) => {
     try {
-      await apiClient.updateTask(id, updates);
+      const { error } = await supabase.from('production_tasks').update(updates).eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La tâche de production a été modifiée avec succès.' });
       await fetchTasks();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de modification', 
-        description: formatErrorMessage(e, 'Impossible de modifier la tâche. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de modifier la tâche.', 
         variant: 'destructive' 
       });
       return false;
@@ -201,14 +199,17 @@ export const useProducts = () => {
 
   const fetchProducts = async () => {
     try {
-      const data = await apiClient.getProducts();
+      const { data, error: fetchError } = await supabase
+        .from('products')
+        .select('*, weight_unit:weight_units(*)');
+      if (fetchError) throw new Error(fetchError.message);
       setProducts(data as any);
       setError(null);
     } catch (e: any) {
       setError(e);
       toast({ 
         title: 'Erreur de chargement', 
-        description: formatErrorMessage(e, 'Impossible de charger les produits. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de charger les produits.', 
         variant: 'destructive' 
       });
     }
@@ -225,14 +226,15 @@ export const useProducts = () => {
 
   const createProduct = async (product: any) => {
     try {
-      await apiClient.createProduct(product);
+      const { error } = await supabase.from('products').insert(product);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'Le produit a été créé avec succès.' });
       await fetchProducts();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de création', 
-        description: formatErrorMessage(e, 'Impossible de créer le produit. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de créer le produit.', 
         variant: 'destructive' 
       });
       return false;
@@ -241,14 +243,15 @@ export const useProducts = () => {
 
   const updateProduct = async (id: string, updates: any) => {
     try {
-      await apiClient.updateProduct(id, updates);
+      const { error } = await supabase.from('products').update(updates).eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'Le produit a été modifié avec succès.' });
       await fetchProducts();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de modification', 
-        description: formatErrorMessage(e, 'Impossible de modifier le produit. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de modifier le produit.', 
         variant: 'destructive' 
       });
       return false;
@@ -257,14 +260,15 @@ export const useProducts = () => {
 
   const deleteProduct = async (id: string) => {
     try {
-      await apiClient.deleteProduct(id);
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'Le produit a été supprimé avec succès.' });
       await fetchProducts();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de suppression', 
-        description: formatErrorMessage(e, 'Impossible de supprimer le produit. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de supprimer le produit.', 
         variant: 'destructive' 
       });
       return false;
@@ -290,12 +294,15 @@ export const useProductionLines = () => {
 
   const fetchLines = async () => {
     try {
-      const data = await apiClient.getLines();
+      const { data, error } = await supabase
+        .from('production_lines')
+        .select('*, weight_unit:weight_units(*)');
+      if (error) throw new Error(error.message);
       setLines(data as any);
     } catch (e: any) {
       toast({ 
         title: 'Erreur de chargement', 
-        description: formatErrorMessage(e, 'Impossible de charger les lignes de production. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de charger les lignes de production.', 
         variant: 'destructive' 
       });
     }
@@ -312,14 +319,15 @@ export const useProductionLines = () => {
 
   const createLine = async (line: any) => {
     try {
-      await apiClient.createLine(line);
+      const { error } = await supabase.from('production_lines').insert(line);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La ligne de production a été créée avec succès.' });
       await fetchLines();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de création', 
-        description: formatErrorMessage(e, 'Impossible de créer la ligne. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de créer la ligne.', 
         variant: 'destructive' 
       });
       return false;
@@ -328,14 +336,15 @@ export const useProductionLines = () => {
 
   const updateLine = async (id: string, updates: any) => {
     try {
-      await apiClient.updateLine(id, updates);
+      const { error } = await supabase.from('production_lines').update(updates).eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La ligne de production a été modifiée avec succès.' });
       await fetchLines();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de modification', 
-        description: formatErrorMessage(e, 'Impossible de modifier la ligne. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de modifier la ligne.', 
         variant: 'destructive' 
       });
       return false;
@@ -344,14 +353,15 @@ export const useProductionLines = () => {
 
   const deleteLine = async (id: string) => {
     try {
-      await apiClient.deleteLine(id);
+      const { error } = await supabase.from('production_lines').delete().eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La ligne de production a été supprimée avec succès.' });
       await fetchLines();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de suppression', 
-        description: formatErrorMessage(e, 'Impossible de supprimer la ligne. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de supprimer la ligne.', 
         variant: 'destructive' 
       });
       return false;
@@ -376,12 +386,15 @@ export const useProductionTasks = () => {
 
   const fetchTasks = async () => {
     try {
-      const data = await apiClient.getTasks();
+      const { data, error } = await supabase
+        .from('production_tasks')
+        .select('*, product:products(*), line:production_lines(*)');
+      if (error) throw new Error(error.message);
       setTasks(data as any);
     } catch (e: any) {
       toast({ 
         title: 'Erreur de chargement', 
-        description: formatErrorMessage(e, 'Impossible de charger les tâches. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de charger les tâches.', 
         variant: 'destructive' 
       });
     }
@@ -398,14 +411,15 @@ export const useProductionTasks = () => {
 
   const createTask = async (task: any) => {
     try {
-      await apiClient.createTask(task);
+      const { error } = await supabase.from('production_tasks').insert(task);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La tâche de production a été créée avec succès.' });
       await fetchTasks();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de création', 
-        description: formatErrorMessage(e, 'Impossible de créer la tâche. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de créer la tâche.', 
         variant: 'destructive' 
       });
       return false;
@@ -414,14 +428,15 @@ export const useProductionTasks = () => {
 
   const updateTask = async (id: string, updates: any) => {
     try {
-      await apiClient.updateTask(id, updates);
+      const { error } = await supabase.from('production_tasks').update(updates).eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La tâche de production a été modifiée avec succès.' });
       await fetchTasks();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de modification', 
-        description: formatErrorMessage(e, 'Impossible de modifier la tâche. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de modifier la tâche.', 
         variant: 'destructive' 
       });
       return false;
@@ -430,14 +445,15 @@ export const useProductionTasks = () => {
 
   const deleteTask = async (id: string) => {
     try {
-      await apiClient.deleteTask(id);
+      const { error } = await supabase.from('production_tasks').delete().eq('id', id);
+      if (error) throw new Error(error.message);
       toast({ title: 'Succès', description: 'La tâche de production a été supprimée avec succès.' });
       await fetchTasks();
       return true;
     } catch (e: any) {
       toast({ 
         title: 'Erreur de suppression', 
-        description: formatErrorMessage(e, 'Impossible de supprimer la tâche. Veuillez réessayer.'), 
+        description: e.message || 'Impossible de supprimer la tâche.', 
         variant: 'destructive' 
       });
       return false;
