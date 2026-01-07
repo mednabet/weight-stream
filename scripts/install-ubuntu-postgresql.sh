@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
-# Script d'installation Weight Stream - Ubuntu Server avec MySQL
-# Version: 2.1.0 - Self-Hosted avec Backend Node.js
-# Mise à jour: Décembre 2024
+# Script d'installation Weight Stream - Ubuntu Server avec PostgreSQL
+# Version: 3.0.0 - Self-Hosted avec Backend Node.js + PostgreSQL
+# Mise à jour: Janvier 2025
 # =============================================================================
 
 set -e
@@ -92,41 +92,62 @@ install_nodejs() {
     print_success "Node.js $(node --version), Git et PM2 installés"
 }
 
-# Installation de MySQL
-install_mysql() {
-    print_step "Installation de MySQL 8.0"
+# Installation de PostgreSQL
+install_postgresql() {
+    print_step "Installation de PostgreSQL"
     
-    # Vérifier si MySQL est déjà installé
-    if command -v mysql &> /dev/null; then
-        print_success "MySQL déjà installé"
-        systemctl start mysql
+    # Vérifier si PostgreSQL est déjà installé
+    if command -v psql &> /dev/null; then
+        print_success "PostgreSQL déjà installé"
+        systemctl start postgresql
         return
     fi
     
-    apt install -y mysql-server
-    systemctl start mysql
-    systemctl enable mysql
-    print_success "MySQL installé et démarré"
+    apt install -y postgresql postgresql-contrib
+    systemctl start postgresql
+    systemctl enable postgresql
+    print_success "PostgreSQL installé et démarré"
 }
 
-# Configuration de MySQL
-configure_mysql() {
-    print_step "Configuration de la base de données"
+# Configuration de PostgreSQL
+configure_postgresql() {
+    print_step "Configuration de la base de données PostgreSQL"
     
     # Génération automatique du mot de passe
     DB_PASS=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)
     
-    mysql -u root <<EOF
-CREATE DATABASE IF NOT EXISTS $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
-GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
-FLUSH PRIVILEGES;
+    sudo -u postgres psql <<EOF
+-- Créer l'utilisateur
+DO \$\$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$DB_USER') THEN
+        CREATE USER $DB_USER WITH ENCRYPTED PASSWORD '$DB_PASS';
+    ELSE
+        ALTER USER $DB_USER WITH ENCRYPTED PASSWORD '$DB_PASS';
+    END IF;
+END
+\$\$;
+
+-- Créer la base de données
+SELECT 'CREATE DATABASE $DB_NAME OWNER $DB_USER' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$DB_NAME')\gexec
+
+-- Donner les droits
+GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
+EOF
+
+    # Accorder les droits sur le schéma public
+    sudo -u postgres psql -d $DB_NAME <<EOF
+GRANT ALL ON SCHEMA public TO $DB_USER;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $DB_USER;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
 EOF
     
     echo "$DB_PASS" > /tmp/db_pass.tmp
     chmod 600 /tmp/db_pass.tmp
     
-    print_success "Base de données '$DB_NAME' créée"
+    print_success "Base de données PostgreSQL '$DB_NAME' créée"
 }
 
 # Installation de Nginx
@@ -229,9 +250,9 @@ deploy_application() {
     # Configuration du backend
     print_status "Configuration du backend Node.js..."
     cat > $APP_DIR/server/.env <<EOF
-# Database MySQL
+# Database PostgreSQL
 DB_HOST=localhost
-DB_PORT=3306
+DB_PORT=5432
 DB_NAME=$DB_NAME
 DB_USER=$DB_USER
 DB_PASSWORD=$DB_PASS
@@ -290,16 +311,16 @@ create_admin_user() {
     fi
     
     # Hash du mot de passe avec bcrypt via Node.js
+    cd $APP_DIR/server
     ADMIN_PASS_HASH=$(node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));" 2>/dev/null || echo "")
     
     if [ -n "$ADMIN_PASS_HASH" ]; then
-        ADMIN_ID=$(cat /proc/sys/kernel/random/uuid)
         DB_PASS=$(cat /tmp/db_pass.tmp)
         
-        mysql -u $DB_USER -p"$DB_PASS" $DB_NAME <<EOF
+        PGPASSWORD="$DB_PASS" psql -h localhost -U $DB_USER -d $DB_NAME <<EOF
 INSERT INTO users (id, email, password_hash, role, is_active, created_at, updated_at)
-VALUES ('$ADMIN_ID', '$ADMIN_EMAIL', '$ADMIN_PASS_HASH', 'admin', TRUE, NOW(), NOW())
-ON DUPLICATE KEY UPDATE password_hash='$ADMIN_PASS_HASH', role='admin';
+VALUES (gen_random_uuid(), '$ADMIN_EMAIL', '$ADMIN_PASS_HASH', 'admin', TRUE, NOW(), NOW())
+ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = 'admin';
 EOF
         print_success "Administrateur créé: $ADMIN_EMAIL"
     else
@@ -313,14 +334,14 @@ create_default_weight_units() {
     
     DB_PASS=$(cat /tmp/db_pass.tmp)
     
-    mysql -u $DB_USER -p"$DB_PASS" $DB_NAME <<EOF
+    PGPASSWORD="$DB_PASS" psql -h localhost -U $DB_USER -d $DB_NAME <<EOF
 INSERT INTO weight_units (id, code, name, symbol, decimal_precision, is_default, created_at, updated_at)
 VALUES 
-    (UUID(), 'KG', 'Kilogramme', 'kg', 3, TRUE, NOW(), NOW()),
-    (UUID(), 'G', 'Gramme', 'g', 0, FALSE, NOW(), NOW()),
-    (UUID(), 'LB', 'Livre', 'lb', 2, FALSE, NOW(), NOW()),
-    (UUID(), 'OZ', 'Once', 'oz', 1, FALSE, NOW(), NOW())
-ON DUPLICATE KEY UPDATE name=VALUES(name);
+    (gen_random_uuid(), 'KG', 'Kilogramme', 'kg', 3, TRUE, NOW(), NOW()),
+    (gen_random_uuid(), 'G', 'Gramme', 'g', 0, FALSE, NOW(), NOW()),
+    (gen_random_uuid(), 'LB', 'Livre', 'lb', 2, FALSE, NOW(), NOW()),
+    (gen_random_uuid(), 'OZ', 'Once', 'oz', 1, FALSE, NOW(), NOW())
+ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name;
 EOF
     
     print_success "Unités de poids créées (KG, G, LB, OZ)"
@@ -378,17 +399,17 @@ setup_backup() {
     print_step "Configuration des sauvegardes automatiques"
     
     DB_PASS=$(cat /tmp/db_pass.tmp)
-    mkdir -p /var/backups/mysql
+    mkdir -p /var/backups/postgresql
     
     cat > /usr/local/bin/backup-$APP_NAME.sh <<EOF
 #!/bin/bash
-# Script de sauvegarde automatique - Weight Stream
-BACKUP_DIR="/var/backups/mysql"
+# Script de sauvegarde automatique - Weight Stream (PostgreSQL)
+BACKUP_DIR="/var/backups/postgresql"
 DATE=\$(date +%Y%m%d_%H%M%S)
 RETENTION_DAYS=30
 
 # Sauvegarde de la base de données
-mysqldump -u $DB_USER -p'$DB_PASS' $DB_NAME | gzip > \$BACKUP_DIR/${DB_NAME}_\${DATE}.sql.gz
+PGPASSWORD='$DB_PASS' pg_dump -h localhost -U $DB_USER $DB_NAME | gzip > \$BACKUP_DIR/${DB_NAME}_\${DATE}.sql.gz
 
 # Suppression des anciennes sauvegardes
 find \$BACKUP_DIR -name "*.sql.gz" -mtime +\$RETENTION_DAYS -delete
@@ -432,13 +453,14 @@ show_summary() {
     echo -e "${GREEN}Installation terminée avec succès!${NC}"
     echo "============================================"
     echo ""
-    echo -e "${CYAN}Application:${NC} Weight Stream v2.1.0"
+    echo -e "${CYAN}Application:${NC} Weight Stream v3.0.0"
     echo -e "${CYAN}Répertoire:${NC}  $APP_DIR"
     echo -e "${CYAN}URL:${NC}         http://$SERVER_NAME"
     echo ""
-    echo -e "${YELLOW}Base de données MySQL:${NC}"
+    echo -e "${YELLOW}Base de données PostgreSQL:${NC}"
     echo "  Base: $DB_NAME"
     echo "  User: $DB_USER"
+    echo "  Port: 5432"
     echo "  Pass: voir $APP_DIR/server/.env"
     echo ""
     echo -e "${YELLOW}Unités de poids configurées:${NC}"
@@ -456,6 +478,7 @@ show_summary() {
     echo "  pm2 restart $APP_NAME-api   # Redémarrer backend"
     echo "  pm2 status                   # Statut services"
     echo "  pm2 monit                    # Monitoring temps réel"
+    echo "  sudo systemctl status postgresql  # Statut PostgreSQL"
     echo ""
     echo -e "${GREEN}Accès: http://$SERVER_NAME${NC}"
     echo ""
@@ -496,22 +519,21 @@ main() {
     
     echo "============================================"
     echo "  Weight Stream - Installation Self-Hosted"
-    echo "  Ubuntu Server + MySQL + Node.js"
-    echo "  Version 2.1.0"
+    echo "  Ubuntu Server + PostgreSQL + Node.js"
+    echo "  Version 3.0.0"
     echo "============================================"
-    echo ""
     
     check_root
     check_system
     update_system
     install_nodejs
-    install_mysql
-    configure_mysql
+    install_postgresql
+    configure_postgresql
     install_nginx
     configure_nginx
     deploy_application
-    create_default_weight_units
     create_admin_user
+    create_default_weight_units
     setup_pm2
     configure_firewall
     setup_backup
@@ -524,4 +546,5 @@ main() {
     show_summary
 }
 
+# Démarrer l'installation
 main "$@"
