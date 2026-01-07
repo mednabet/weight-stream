@@ -78,22 +78,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [getUserRole]);
 
   useEffect(() => {
-    refreshUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const role = await getUserRole(session.user.id);
-        setState(prev => ({
-          ...prev,
-          user: { id: session.user.id, email: session.user.email || '' },
-          role,
-          isAuthenticated: true,
-          isLoading: false,
-        }));
-      } else if (event === 'SIGNED_OUT') {
+    // 1) Subscribe FIRST (prevents missing auth events)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session?.user) {
         setState(prev => ({ ...prev, user: null, role: null, isAuthenticated: false, isLoading: false }));
+        return;
       }
+
+      // Keep the callback sync (avoid deadlocks). Defer role lookup.
+      setState(prev => ({
+        ...prev,
+        user: { id: session.user.id, email: session.user.email || '' },
+        role: null,
+        isAuthenticated: true,
+        isLoading: true,
+      }));
+
+      setTimeout(() => {
+        getUserRole(session.user.id)
+          .then((role) => {
+            setState(prev => ({
+              ...prev,
+              user: { id: session.user!.id, email: session.user!.email || '' },
+              role,
+              isAuthenticated: true,
+              isLoading: false,
+            }));
+          })
+          .catch(() => {
+            setState(prev => ({
+              ...prev,
+              user: { id: session.user!.id, email: session.user!.email || '' },
+              role: 'operator',
+              isAuthenticated: true,
+              isLoading: false,
+            }));
+          });
+      }, 0);
     });
+
+    // 2) THEN fetch current session
+    refreshUser();
 
     return () => subscription.unsubscribe();
   }, [refreshUser, getUserRole]);

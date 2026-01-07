@@ -47,20 +47,25 @@ export function LoginPage() {
 
     try {
       const result = await login(email, password);
-      
+
       if (!result.success) {
         setError(result.error || 'Erreur de connexion');
         setIsLoading(false);
+        return;
       }
-      // Keep loading state - redirect will happen via useEffect when role is loaded
-    } catch (err) {
+
+      // Stop button loading and show a dedicated redirect state.
+      setIsLoading(false);
+      setIsRedirecting(true);
+      // Actual navigation is handled by the effect once `role` is available.
+    } catch {
       setError('Erreur de connexion au serveur');
       setIsLoading(false);
     }
   };
 
-  // Show loading if redirecting
-  if (isRedirecting || (isAuthenticated && !role && !authLoading)) {
+  // Show loading if redirecting (or waiting for role after sign-in)
+  if (isRedirecting || (isAuthenticated && !role && authLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
