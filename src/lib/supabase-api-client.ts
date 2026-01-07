@@ -372,8 +372,14 @@ class SupabaseApiClient {
   }
 
   async createUser(userData: { email: string; password: string; role: string }) {
-    // This would require an edge function for admin user creation
-    throw new Error('Création d\'utilisateur non disponible en mode Supabase');
+    const { data, error } = await supabase.functions.invoke('bootstrap-admin', {
+      body: userData,
+    });
+
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    
+    return data;
   }
 
   async updateUserRole(userId: string, role: 'operator' | 'supervisor' | 'admin') {

@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       },
     });
 
-    const { email, password } = await req.json();
+    const { email, password, role = 'admin' } = await req.json();
 
     if (!email || !password) {
       return new Response(
@@ -32,7 +32,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[bootstrap-admin] Creating admin user: ${email}`);
+    // Validate role
+    const validRoles = ['operator', 'supervisor', 'admin'];
+    if (!validRoles.includes(role)) {
+      return new Response(
+        JSON.stringify({ error: 'Rôle invalide' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[bootstrap-admin] Creating user: ${email} with role: ${role}`);
 
     // Check if user already exists
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
@@ -41,27 +50,30 @@ Deno.serve(async (req) => {
     let userId: string;
 
     if (existingUser) {
-      console.log(`[bootstrap-admin] User already exists, updating role`);
-      userId = existingUser.id;
-    } else {
-      // Create user with admin API
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
-
-      if (createError) {
-        console.error(`[bootstrap-admin] Error creating user:`, createError);
-        return new Response(
-          JSON.stringify({ error: createError.message }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      userId = newUser.user.id;
-      console.log(`[bootstrap-admin] User created with ID: ${userId}`);
+      console.log(`[bootstrap-admin] User already exists`);
+      return new Response(
+        JSON.stringify({ error: 'Email déjà utilisé' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    // Create user with admin API
+    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+
+    if (createError) {
+      console.error(`[bootstrap-admin] Error creating user:`, createError);
+      return new Response(
+        JSON.stringify({ error: createError.message }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    userId = newUser.user.id;
+    console.log(`[bootstrap-admin] User created with ID: ${userId}`);
 
     // Check if role already exists
     const { data: existingRole } = await supabaseAdmin
@@ -71,10 +83,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existingRole) {
-      // Update existing role to admin
+      // Update existing role
       const { error: updateError } = await supabaseAdmin
         .from('user_roles')
-        .update({ role: 'admin' })
+        .update({ role })
         .eq('user_id', userId);
 
       if (updateError) {
@@ -84,12 +96,12 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      console.log(`[bootstrap-admin] Role updated to admin`);
+      console.log(`[bootstrap-admin] Role updated to ${role}`);
     } else {
-      // Insert new admin role
+      // Insert new role
       const { error: roleError } = await supabaseAdmin
         .from('user_roles')
-        .insert({ user_id: userId, role: 'admin' });
+        .insert({ user_id: userId, role });
 
       if (roleError) {
         console.error(`[bootstrap-admin] Error inserting role:`, roleError);
@@ -98,14 +110,16 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      console.log(`[bootstrap-admin] Admin role inserted`);
+      console.log(`[bootstrap-admin] Role ${role} inserted`);
     }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Compte admin créé: ${email}`,
-        userId 
+        message: `Compte créé: ${email} (${role})`,
+        userId,
+        email,
+        role
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
