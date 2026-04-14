@@ -259,22 +259,43 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
             </CardHeader>
             <CardContent className="p-3 sm:p-6 pt-0 space-y-4">
               {/* Weight display */}
-              <div className="flex items-center justify-between rounded-lg border p-3 sm:p-4">
+              <div className={`flex items-center justify-between rounded-lg border p-3 sm:p-4 transition-colors duration-300 ${
+                sensor.weight.status === 'stable' ? 'border-green-500/50 bg-green-500/5' :
+                sensor.weight.status === 'unstable' ? 'border-orange-500/50 bg-orange-500/5' :
+                sensor.weight.status === 'error' ? 'border-red-500/50 bg-red-500/5' :
+                'border-border'
+              }`}>
                 <div>
                   <div className="text-xs sm:text-sm text-muted-foreground">Poids actuel</div>
-                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold font-mono">
+                  <div className={`text-2xl sm:text-3xl md:text-4xl font-bold font-mono transition-colors duration-300 ${
+                    sensor.weight.status === 'stable' ? 'text-green-400' :
+                    sensor.weight.status === 'unstable' ? 'text-orange-400 animate-pulse' :
+                    sensor.weight.status === 'error' ? 'text-red-400' :
+                    'text-muted-foreground'
+                  }`}>
                     {sensor.weight.value.toFixed(3)}
                   </div>
                 </div>
                 <Badge 
-                  variant={sensor.weight.status === 'stable' ? 'default' : sensor.weight.status === 'unstable' ? 'secondary' : 'destructive'}
-                  className="text-xs sm:text-sm"
+                  className={`text-xs sm:text-sm font-medium ${
+                    sensor.weight.status === 'stable' ? 'bg-green-600 hover:bg-green-700 text-white' :
+                    sensor.weight.status === 'unstable' ? 'bg-orange-500 hover:bg-orange-600 text-white animate-pulse' :
+                    sensor.weight.status === 'error' ? 'bg-red-600 hover:bg-red-700 text-white' :
+                    'bg-gray-600 hover:bg-gray-700 text-white'
+                  }`}
                 >
                   {sensor.weight.status === 'stable' ? 'Stable' : 
                    sensor.weight.status === 'unstable' ? 'Instable' : 
                    sensor.weight.status === 'error' ? 'Erreur' : 'Hors ligne'}
                 </Badge>
               </div>
+
+              {/* Warning message when unstable */}
+              {sensor.weight.status === 'unstable' && (
+                <div className="text-xs sm:text-sm text-orange-400 text-center font-medium animate-pulse">
+                  Balance instable — veuillez attendre la stabilisation avant de confirmer.
+                </div>
+              )}
 
               {/* Target weight info */}
               {activeTask && activeTask.target_weight && (
@@ -291,7 +312,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                 <div className="grid grid-cols-2 gap-3">
                   <Button 
                     onClick={() => confirmWeighing('conforme')} 
-                    disabled={!activeTaskId || activeTask?.status !== 'in_progress'}
+                    disabled={!activeTaskId || activeTask?.status !== 'in_progress' || sensor.weight.status !== 'stable'}
                     className="h-14 sm:h-16 text-base sm:text-lg bg-green-600 hover:bg-green-700 text-white"
                   >
                     <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
@@ -299,7 +320,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                   </Button>
                   <Button 
                     onClick={() => confirmWeighing('non_conforme')} 
-                    disabled={!activeTaskId || activeTask?.status !== 'in_progress'}
+                    disabled={!activeTaskId || activeTask?.status !== 'in_progress' || sensor.weight.status !== 'stable'}
                     variant="destructive"
                     className="h-14 sm:h-16 text-base sm:text-lg"
                   >
@@ -310,7 +331,12 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
               </div>
 
               <div className="text-xs text-muted-foreground text-center">
-                L'opérateur confirme manuellement le poids lu et l'état de conformité du produit.
+                {sensor.weight.status === 'stable' 
+                  ? "L'opérateur confirme manuellement le poids lu et l'état de conformité du produit."
+                  : sensor.weight.status === 'unstable'
+                    ? 'Les boutons sont désactivés tant que la balance est instable.'
+                    : 'Connectez une balance pour activer le pesage.'
+                }
               </div>
             </CardContent>
           </Card>
