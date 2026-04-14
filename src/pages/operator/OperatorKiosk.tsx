@@ -37,6 +37,30 @@ interface OperatorKioskProps {
   embedded?: boolean;
 }
 
+/* ─────────────── Panel wrapper component ─────────────── */
+function Panel({ title, icon, children, className = '', headerRight }: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  headerRight?: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-2xl bg-[#111827]/80 border border-slate-700/50 flex flex-col overflow-hidden ${className}`}>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/40 bg-slate-800/30">
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">{title}</span>
+        </div>
+        {headerRight}
+      </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const { user, logout } = useAuth();
   const { products } = useProducts();
@@ -250,7 +274,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const progressPct = activeTask ? Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100) : 0;
 
   // === SVG arc progress ===
-  const arcRadius = 54;
+  const arcRadius = 44;
   const arcCircumference = 2 * Math.PI * arcRadius;
   const arcOffset = arcCircumference - (progressPct / 100) * arcCircumference;
 
@@ -344,242 +368,274 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       ) : (
         <div className="flex-1 flex flex-col min-h-0 p-3 gap-3">
 
-          {/* === MAIN ROW: Weight center + Actions right === */}
+          {/* === TOP ROW: 3 columns === */}
           <div className="flex-1 flex gap-3 min-h-0">
 
-            {/* === LEFT SIDEBAR: Stats === */}
-            <div className="w-44 flex flex-col gap-2">
-              {/* Progress ring */}
-              {isTaskActive && activeTask && (
-                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-3 flex flex-col items-center">
-                  <div className="relative w-28 h-28">
-                    <svg className="w-28 h-28 -rotate-90" viewBox="0 0 120 120">
-                      <circle cx="60" cy="60" r={arcRadius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
-                      <circle
-                        cx="60" cy="60" r={arcRadius} fill="none"
-                        stroke={progressPct >= 100 ? '#10b981' : progressPct >= 50 ? '#3b82f6' : '#6366f1'}
-                        strokeWidth="8" strokeLinecap="round"
-                        strokeDasharray={arcCircumference}
-                        strokeDashoffset={arcOffset}
-                        className="transition-all duration-700 ease-out"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-white font-mono">{activeTask.produced_quantity}</span>
-                      <span className="text-[10px] text-slate-500">/ {activeTask.target_quantity}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-500 mt-1 font-medium">{Math.round(progressPct)}% terminé</span>
-                </div>
-              )}
+            {/* ═══════ LEFT COLUMN: Progression + Statistiques ═══════ */}
+            <div className="w-48 flex flex-col gap-3">
 
-              {/* Stats cards */}
-              {stats.total > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="rounded-xl bg-emerald-500/[0.08] border border-emerald-500/10 px-3 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-[11px] text-emerald-400/80">Conformes</span>
+              {/* PANEL: Progression */}
+              <Panel
+                title="Progression"
+                icon={<TrendingUp className="w-3.5 h-3.5 text-indigo-400" />}
+                className="flex-shrink-0"
+              >
+                {isTaskActive && activeTask ? (
+                  <div className="flex flex-col items-center py-3 px-2">
+                    <div className="relative w-24 h-24">
+                      <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r={arcRadius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="7" />
+                        <circle
+                          cx="50" cy="50" r={arcRadius} fill="none"
+                          stroke={progressPct >= 100 ? '#10b981' : progressPct >= 50 ? '#3b82f6' : '#6366f1'}
+                          strokeWidth="7" strokeLinecap="round"
+                          strokeDasharray={arcCircumference}
+                          strokeDashoffset={arcOffset}
+                          className="transition-all duration-700 ease-out"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-xl font-bold text-white font-mono">{activeTask.produced_quantity}</span>
+                        <span className="text-[10px] text-slate-500">/ {activeTask.target_quantity}</span>
+                      </div>
                     </div>
-                    <span className="text-lg font-bold text-emerald-400 font-mono">{stats.conformes}</span>
+                    <span className="text-[11px] text-slate-400 mt-1.5 font-semibold">{Math.round(progressPct)}% terminé</span>
                   </div>
-                  <div className="rounded-xl bg-rose-500/[0.08] border border-rose-500/10 px-3 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                      <span className="text-[11px] text-rose-400/80">Non conf.</span>
-                    </div>
-                    <span className="text-lg font-bold text-rose-400 font-mono">{stats.nonConformes}</span>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 px-3">
+                    <Activity className="w-7 h-7 text-slate-600 mb-2" />
+                    <span className="text-[11px] text-slate-500 text-center">Aucune tâche</span>
                   </div>
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] text-slate-500">Conformité</span>
-                      <span className={`text-sm font-bold font-mono ${
-                        stats.tauxConformite >= 90 ? 'text-emerald-400' : stats.tauxConformite >= 70 ? 'text-amber-400' : 'text-rose-400'
-                      }`}>{stats.tauxConformite}%</span>
-                    </div>
-                    <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ease-out ${
-                          stats.tauxConformite >= 90 ? 'bg-emerald-500' : stats.tauxConformite >= 70 ? 'bg-amber-500' : 'bg-rose-500'
-                        }`}
-                        style={{ width: `${stats.tauxConformite}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+                )}
+              </Panel>
 
-              {stats.total === 0 && !isTaskActive && (
-                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4 flex flex-col items-center justify-center flex-1">
-                  <Activity className="w-8 h-8 text-slate-600 mb-2" />
-                  <span className="text-[11px] text-slate-500 text-center">Aucune donnée</span>
-                </div>
-              )}
+              {/* PANEL: Statistiques */}
+              <Panel
+                title="Statistiques"
+                icon={<Activity className="w-3.5 h-3.5 text-cyan-400" />}
+                className="flex-1"
+              >
+                {stats.total > 0 ? (
+                  <div className="flex flex-col gap-2 p-3">
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-emerald-500/[0.08] border border-emerald-500/10">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs text-emerald-400/80 font-medium">Conformes</span>
+                      </div>
+                      <span className="text-lg font-bold text-emerald-400 font-mono">{stats.conformes}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-rose-500/[0.08] border border-rose-500/10">
+                      <div className="flex items-center gap-2">
+                        <XCircle className="w-4 h-4 text-rose-400" />
+                        <span className="text-xs text-rose-400/80 font-medium">Non conf.</span>
+                      </div>
+                      <span className="text-lg font-bold text-rose-400 font-mono">{stats.nonConformes}</span>
+                    </div>
+                    <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] text-slate-500 font-medium">Conformité</span>
+                        <span className={`text-sm font-bold font-mono ${
+                          stats.tauxConformite >= 90 ? 'text-emerald-400' : stats.tauxConformite >= 70 ? 'text-amber-400' : 'text-rose-400'
+                        }`}>{stats.tauxConformite}%</span>
+                      </div>
+                      <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${
+                            stats.tauxConformite >= 90 ? 'bg-emerald-500' : stats.tauxConformite >= 70 ? 'bg-amber-500' : 'bg-rose-500'
+                          }`}
+                          style={{ width: `${stats.tauxConformite}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center flex-1 py-6">
+                    <Activity className="w-7 h-7 text-slate-600 mb-2" />
+                    <span className="text-[11px] text-slate-500 text-center">Aucune donnée</span>
+                  </div>
+                )}
+              </Panel>
             </div>
 
-            {/* === CENTER: Weight Display === */}
-            <div className="flex-1 rounded-2xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/[0.06] flex flex-col items-center justify-center relative overflow-hidden">
-              {/* Subtle glow effect behind weight */}
-              <div className={`absolute w-64 h-64 rounded-full blur-[100px] opacity-20 transition-colors duration-500 ${
-                isStable ? 'bg-emerald-500' : isUnstable ? 'bg-amber-500' : isError ? 'bg-red-500' : 'bg-slate-700'
-              }`} />
+            {/* ═══════ CENTER: Balance ═══════ */}
+            <Panel
+              title="Balance"
+              icon={<Scale className="w-3.5 h-3.5 text-emerald-400" />}
+              className="flex-1"
+              headerRight={
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${statusDotColor} ${isUnstable ? 'animate-pulse' : ''}`} />
+                  <span className="text-[11px] text-slate-400 font-medium uppercase">{statusLabel}</span>
+                </div>
+              }
+            >
+              <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden">
+                {/* Subtle glow effect */}
+                <div className={`absolute w-64 h-64 rounded-full blur-[100px] opacity-20 transition-colors duration-500 ${
+                  isStable ? 'bg-emerald-500' : isUnstable ? 'bg-amber-500' : isError ? 'bg-red-500' : 'bg-slate-700'
+                }`} />
 
-              {/* Status indicator */}
-              <div className="flex items-center gap-2 mb-3 relative z-10">
-                <div className={`w-2 h-2 rounded-full ${statusDotColor} ${isUnstable ? 'animate-pulse' : ''}`} />
-                <span className="text-xs text-slate-400 font-medium tracking-wide uppercase">{statusLabel}</span>
-              </div>
+                {/* Weight value */}
+                <div className={`relative z-10 text-6xl sm:text-7xl md:text-8xl font-bold font-mono leading-none tracking-tighter transition-all duration-300 ${weightColor} ${isUnstable ? 'animate-pulse' : ''}`}>
+                  {sensor.weight.value.toFixed(3)}
+                </div>
+                <span className="text-sm text-slate-500 font-medium mt-1 relative z-10">kg</span>
 
-              {/* Weight value */}
-              <div className={`relative z-10 text-6xl sm:text-7xl md:text-8xl font-bold font-mono leading-none tracking-tighter transition-all duration-300 ${weightColor} ${isUnstable ? 'animate-pulse' : ''}`}>
-                {sensor.weight.value.toFixed(3)}
-              </div>
-
-              {/* Unit label */}
-              <span className="text-sm text-slate-500 font-medium mt-1 relative z-10">kg</span>
-
-              {/* Tolerance info */}
-              {activeTask?.target_weight && (
-                <div className="mt-3 flex items-center gap-3 relative z-10">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                    <TrendingUp className="w-3 h-3 text-slate-500" />
-                    <span className="text-[11px] text-slate-400">Cible</span>
-                    <span className="text-[11px] font-mono font-semibold text-slate-200">{activeTask.target_weight}</span>
+                {/* Tolerance info */}
+                {activeTask?.target_weight && (
+                  <div className="mt-4 flex items-center gap-3 relative z-10">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                      <TrendingUp className="w-3 h-3 text-slate-500" />
+                      <span className="text-[11px] text-slate-400">Cible</span>
+                      <span className="text-[11px] font-mono font-semibold text-slate-200">{activeTask.target_weight}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                      <span className="text-[11px] text-slate-500">Min</span>
+                      <span className="text-[11px] font-mono text-slate-300">{activeTask.tolerance_min}</span>
+                      <span className="text-[11px] text-slate-600 mx-0.5">—</span>
+                      <span className="text-[11px] text-slate-500">Max</span>
+                      <span className="text-[11px] font-mono text-slate-300">{activeTask.tolerance_max}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                    <span className="text-[11px] text-slate-500">Min</span>
-                    <span className="text-[11px] font-mono text-slate-300">{activeTask.tolerance_min}</span>
-                    <span className="text-[11px] text-slate-600 mx-0.5">—</span>
-                    <span className="text-[11px] text-slate-500">Max</span>
-                    <span className="text-[11px] font-mono text-slate-300">{activeTask.tolerance_max}</span>
+                )}
+
+                {/* Weight state badge */}
+                {weightState && (
+                  <div className={`mt-3 px-5 py-2 rounded-xl border text-sm font-bold relative z-10 shadow-lg transition-all duration-300 ${weightState.bg} ${weightState.color} ${weightState.glow}`}>
+                    <span className="mr-1.5">{weightState.icon}</span>
+                    {weightState.label}
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Weight state badge */}
-              {weightState && (
-                <div className={`mt-3 px-5 py-2 rounded-xl border text-sm font-bold relative z-10 shadow-lg transition-all duration-300 ${weightState.bg} ${weightState.color} ${weightState.glow}`}>
-                  <span className="mr-1.5">{weightState.icon}</span>
-                  {weightState.label}
-                </div>
-              )}
+                {/* Unstable warning */}
+                {isUnstable && (
+                  <div className="mt-3 flex items-center gap-2 text-amber-400/80 animate-pulse relative z-10">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Stabilisation en cours...</span>
+                  </div>
+                )}
+              </div>
+            </Panel>
 
-              {/* Unstable warning */}
-              {isUnstable && (
-                <div className="mt-3 flex items-center gap-2 text-amber-400/80 animate-pulse relative z-10">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span className="text-xs font-medium">Stabilisation en cours...</span>
-                </div>
-              )}
-            </div>
+            {/* ═══════ RIGHT COLUMN: Contrôle + Actions ═══════ */}
+            <div className="w-56 sm:w-64 flex flex-col gap-3">
 
-            {/* === RIGHT: Action Buttons === */}
-            <div className="w-52 sm:w-60 md:w-64 flex flex-col gap-2">
-              {/* Task controls */}
+              {/* PANEL: Contrôle tâche */}
               {isTaskActive && activeTask && (
-                <div className="flex gap-2">
-                  {activeTask.status !== 'in_progress' ? (
-                    <button
-                      onClick={() => setStatus('in_progress')}
-                      className="flex-1 h-16 flex items-center justify-center gap-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 text-base font-bold hover:bg-emerald-500/25 active:scale-[0.97] transition-all touch-manipulation"
-                    >
-                      <Play className="w-5 h-5" />
-                      Démarrer
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setStatus('paused')}
-                      className="flex-1 h-16 flex items-center justify-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
-                    >
-                      <Pause className="w-5 h-5" />
-                      Pause
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setStatus('completed')}
-                    className="h-16 px-5 flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-slate-400 text-base font-semibold hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97] transition-all touch-manipulation"
-                  >
-                    <Square className="w-5 h-5" />
-                    Fin
-                  </button>
-                </div>
-              )}
-
-              {/* Conforme / Non conforme buttons */}
-              {isTaskRunning ? (
-                <>
-                  <button
-                    onClick={() => confirmWeighing('conforme')}
-                    disabled={!isStable}
-                    className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
-                  >
-                    <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12" />
-                    <span className="text-xl sm:text-2xl font-bold tracking-tight">Conforme</span>
-                  </button>
-                  <button
-                    onClick={() => confirmWeighing('non_conforme')}
-                    disabled={!isStable}
-                    className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
-                  >
-                    <XCircle className="w-10 h-10 sm:w-12 sm:h-12" />
-                    <span className="text-xl sm:text-2xl font-bold tracking-tight">Non conforme</span>
-                  </button>
-                </>
-              ) : !isTaskActive ? (
-                <div className="flex-1 flex flex-col items-center justify-center gap-5 rounded-2xl bg-white/[0.02] border border-dashed border-white/10">
-                  <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center">
-                    <Scale className="w-8 h-8 text-slate-600" />
-                  </div>
-                  <span className="text-base text-slate-500 text-center px-4 font-medium">Aucune tâche active</span>
-                  <div className="flex flex-col gap-3 w-full px-6">
-                    <button
-                      onClick={() => setShowCreateTask(!showCreateTask)}
-                      className="flex items-center justify-center gap-3 w-full h-14 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-base font-bold hover:bg-indigo-500/25 active:scale-[0.97] transition-all touch-manipulation"
-                    >
-                      <PlusCircle className="w-5 h-5" />
-                      Nouvelle tâche
-                    </button>
-                    {lastCompletedTask && (
+                <Panel
+                  title="Contrôle tâche"
+                  icon={<Play className="w-3.5 h-3.5 text-amber-400" />}
+                  className="flex-shrink-0"
+                >
+                  <div className="flex gap-2 p-3">
+                    {activeTask.status !== 'in_progress' ? (
                       <button
-                        onClick={reopenLastTask}
-                        className="flex items-center justify-center gap-3 w-full h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                        onClick={() => setStatus('in_progress')}
+                        className="flex-1 h-14 flex items-center justify-center gap-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 text-base font-bold hover:bg-emerald-500/25 active:scale-[0.97] transition-all touch-manipulation"
                       >
-                        <RotateCcw className="w-5 h-5" />
-                        Réouvrir dernière tâche
+                        <Play className="w-5 h-5" />
+                        Démarrer
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setStatus('paused')}
+                        className="flex-1 h-14 flex items-center justify-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                      >
+                        <Pause className="w-5 h-5" />
+                        Pause
                       </button>
                     )}
+                    <button
+                      onClick={() => setStatus('completed')}
+                      className="h-14 px-5 flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-slate-400 text-base font-semibold hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97] transition-all touch-manipulation"
+                    >
+                      <Square className="w-5 h-5" />
+                      Fin
+                    </button>
                   </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center rounded-2xl bg-white/[0.02] border border-white/[0.06]">
-                  <div className="text-center px-4">
-                    <div className={`w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center ${
-                      activeTask?.status === 'paused' ? 'bg-amber-500/10' : 'bg-slate-500/10'
-                    }`}>
-                      {activeTask?.status === 'paused' ? (
-                        <Pause className="w-6 h-6 text-amber-400" />
-                      ) : (
-                        <Play className="w-6 h-6 text-slate-500" />
+                </Panel>
+              )}
+
+              {/* PANEL: Actions pesage */}
+              <Panel
+                title={isTaskRunning ? 'Actions' : isTaskActive ? 'En attente' : 'Gestion'}
+                icon={isTaskRunning ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Scale className="w-3.5 h-3.5 text-slate-400" />}
+                className="flex-1"
+              >
+                {isTaskRunning ? (
+                  <div className="flex-1 flex flex-col gap-2 p-3">
+                    <button
+                      onClick={() => confirmWeighing('conforme')}
+                      disabled={!isStable}
+                      className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
+                    >
+                      <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12" />
+                      <span className="text-xl sm:text-2xl font-bold tracking-tight">Conforme</span>
+                    </button>
+                    <button
+                      onClick={() => confirmWeighing('non_conforme')}
+                      disabled={!isStable}
+                      className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
+                    >
+                      <XCircle className="w-10 h-10 sm:w-12 sm:h-12" />
+                      <span className="text-xl sm:text-2xl font-bold tracking-tight">Non conforme</span>
+                    </button>
+                  </div>
+                ) : !isTaskActive ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-5 p-4">
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.04] flex items-center justify-center">
+                      <Scale className="w-7 h-7 text-slate-600" />
+                    </div>
+                    <span className="text-sm text-slate-500 text-center font-medium">Aucune tâche active</span>
+                    <div className="flex flex-col gap-3 w-full">
+                      <button
+                        onClick={() => setShowCreateTask(!showCreateTask)}
+                        className="flex items-center justify-center gap-3 w-full h-14 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-base font-bold hover:bg-indigo-500/25 active:scale-[0.97] transition-all touch-manipulation"
+                      >
+                        <PlusCircle className="w-5 h-5" />
+                        Nouvelle tâche
+                      </button>
+                      {lastCompletedTask && (
+                        <button
+                          onClick={reopenLastTask}
+                          className="flex items-center justify-center gap-3 w-full h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                        >
+                          <RotateCcw className="w-5 h-5" />
+                          Réouvrir dernière tâche
+                        </button>
                       )}
                     </div>
-                    <span className="text-sm text-slate-400">
-                      {activeTask?.status === 'paused'
-                        ? 'Tâche en pause'
-                        : 'Démarrez la tâche'}
-                    </span>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="flex-1 flex items-center justify-center p-4">
+                    <div className="text-center">
+                      <div className={`w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center ${
+                        activeTask?.status === 'paused' ? 'bg-amber-500/10' : 'bg-slate-500/10'
+                      }`}>
+                        {activeTask?.status === 'paused' ? (
+                          <Pause className="w-6 h-6 text-amber-400" />
+                        ) : (
+                          <Play className="w-6 h-6 text-slate-500" />
+                        )}
+                      </div>
+                      <span className="text-sm text-slate-400">
+                        {activeTask?.status === 'paused'
+                          ? 'Tâche en pause'
+                          : 'Démarrez la tâche'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </Panel>
             </div>
           </div>
 
-          {/* === BOTTOM: Recent items === */}
-          <div className="flex-shrink-0 h-28 sm:h-32 rounded-2xl bg-white/[0.02] border border-white/[0.06] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.04]">
-              <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-xs text-slate-400 font-medium">Derniers pesages</span>
-              </div>
+          {/* ═══════ BOTTOM: Historique ═══════ */}
+          <Panel
+            title="Historique pesages"
+            icon={<Clock className="w-3.5 h-3.5 text-slate-400" />}
+            className="flex-shrink-0 h-28 sm:h-32"
+            headerRight={
               <div className="flex items-center gap-2">
                 {recentItems.length > 0 && isTaskActive && (
                   <button
@@ -594,9 +650,10 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                   <span className="text-[10px] text-slate-500 font-mono">{stats.total} total</span>
                 )}
               </div>
-            </div>
+            }
+          >
             {recentItems.length > 0 ? (
-              <div className="flex gap-1.5 overflow-x-auto px-3 py-2 h-[calc(100%-36px)]">
+              <div className="flex gap-1.5 overflow-x-auto px-3 py-2 flex-1">
                 {recentItems.slice(0, 20).map((item, idx) => (
                   <div
                     key={item.id}
@@ -621,11 +678,11 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                 ))}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-[calc(100%-36px)]">
+              <div className="flex items-center justify-center flex-1">
                 <span className="text-xs text-slate-600">Aucun pesage enregistré</span>
               </div>
             )}
-          </div>
+          </Panel>
         </div>
       )}
 
