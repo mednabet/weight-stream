@@ -514,11 +514,33 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                     <span className="text-xs font-medium">Stabilisation en cours...</span>
                   </div>
                 )}
+
+                {/* ── Boutons Conforme / Non conforme intégrés sous le poids ── */}
+                {isTaskRunning && (
+                  <div className="mt-5 flex gap-3 relative z-10 w-full max-w-md px-4">
+                    <button
+                      onClick={() => confirmWeighing('conforme')}
+                      disabled={!isStable}
+                      className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
+                    >
+                      <CheckCircle className="w-8 h-8" />
+                      <span className="text-lg font-bold tracking-tight">Conforme</span>
+                    </button>
+                    <button
+                      onClick={() => confirmWeighing('non_conforme')}
+                      disabled={!isStable}
+                      className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
+                    >
+                      <XCircle className="w-8 h-8" />
+                      <span className="text-lg font-bold tracking-tight">Non conforme</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </Panel>
 
-            {/* ═══════ RIGHT COLUMN: Contrôle + Actions ═══════ */}
-            <div className="w-56 sm:w-64 flex flex-col gap-3">
+            {/* ═══════ RIGHT COLUMN: Contrôle tâche ═══════ */}
+            <div className="w-52 flex flex-col gap-3">
 
               {/* PANEL: Contrôle tâche */}
               {isTaskActive && activeTask && (
@@ -527,11 +549,11 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                   icon={<Play className="w-3.5 h-3.5 text-amber-400" />}
                   className="flex-shrink-0"
                 >
-                  <div className="flex gap-2 p-3">
+                  <div className="flex flex-col gap-2 p-3">
                     {activeTask.status !== 'in_progress' ? (
                       <button
                         onClick={() => setStatus('in_progress')}
-                        className="flex-1 h-14 flex items-center justify-center gap-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 text-base font-bold hover:bg-emerald-500/25 active:scale-[0.97] transition-all touch-manipulation"
+                        className="h-14 flex items-center justify-center gap-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 text-base font-bold hover:bg-emerald-500/25 active:scale-[0.97] transition-all touch-manipulation"
                       >
                         <Play className="w-5 h-5" />
                         Démarrer
@@ -539,7 +561,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                     ) : (
                       <button
                         onClick={() => setStatus('paused')}
-                        className="flex-1 h-14 flex items-center justify-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                        className="h-14 flex items-center justify-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
                       >
                         <Pause className="w-5 h-5" />
                         Pause
@@ -547,7 +569,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                     )}
                     <button
                       onClick={() => setStatus('completed')}
-                      className="h-14 px-5 flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-slate-400 text-base font-semibold hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97] transition-all touch-manipulation"
+                      className="h-14 flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-slate-400 text-base font-semibold hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97] transition-all touch-manipulation"
                     >
                       <Square className="w-5 h-5" />
                       Fin
@@ -556,32 +578,13 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                 </Panel>
               )}
 
-              {/* PANEL: Actions pesage */}
-              <Panel
-                title={isTaskRunning ? 'Actions' : isTaskActive ? 'En attente' : 'Gestion'}
-                icon={isTaskRunning ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Scale className="w-3.5 h-3.5 text-slate-400" />}
-                className="flex-1"
-              >
-                {isTaskRunning ? (
-                  <div className="flex-1 flex flex-col gap-2 p-3">
-                    <button
-                      onClick={() => confirmWeighing('conforme')}
-                      disabled={!isStable}
-                      className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
-                    >
-                      <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12" />
-                      <span className="text-xl sm:text-2xl font-bold tracking-tight">Conforme</span>
-                    </button>
-                    <button
-                      onClick={() => confirmWeighing('non_conforme')}
-                      disabled={!isStable}
-                      className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
-                    >
-                      <XCircle className="w-10 h-10 sm:w-12 sm:h-12" />
-                      <span className="text-xl sm:text-2xl font-bold tracking-tight">Non conforme</span>
-                    </button>
-                  </div>
-                ) : !isTaskActive ? (
+              {/* PANEL: Gestion (quand pas de tâche active) */}
+              {!isTaskActive && (
+                <Panel
+                  title="Gestion"
+                  icon={<Scale className="w-3.5 h-3.5 text-slate-400" />}
+                  className="flex-1"
+                >
                   <div className="flex-1 flex flex-col items-center justify-center gap-5 p-4">
                     <div className="w-14 h-14 rounded-2xl bg-white/[0.04] flex items-center justify-center">
                       <Scale className="w-7 h-7 text-slate-600" />
@@ -606,7 +609,16 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                       )}
                     </div>
                   </div>
-                ) : (
+                </Panel>
+              )}
+
+              {/* PANEL: En attente (tâche active mais pas en cours) */}
+              {isTaskActive && !isTaskRunning && (
+                <Panel
+                  title="En attente"
+                  icon={<Clock className="w-3.5 h-3.5 text-amber-400" />}
+                  className="flex-1"
+                >
                   <div className="flex-1 flex items-center justify-center p-4">
                     <div className="text-center">
                       <div className={`w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center ${
@@ -625,8 +637,8 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                       </span>
                     </div>
                   </div>
-                )}
-              </Panel>
+                </Panel>
+              )}
             </div>
           </div>
 

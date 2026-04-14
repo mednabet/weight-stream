@@ -511,45 +511,39 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
                 <span className="text-xs font-medium">Stabilisation en cours...</span>
               </div>
             )}
-          </div>
-        </Panel>
 
-        {/* ═══════ RIGHT: Actions ═══════ */}
-        <Panel
-          title={activeTask ? 'Actions' : 'En attente'}
-          icon={activeTask ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
-          className="w-56 sm:w-64"
-        >
-          {activeTask ? (
-            <div className="flex-1 flex flex-col gap-2 p-3">
-              <button
-                onClick={() => confirmPallet('conforme')}
-                disabled={!isStable}
-                className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
-              >
-                <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12" />
-                <span className="text-xl sm:text-2xl font-bold tracking-tight">Conforme</span>
-              </button>
-              <button
-                onClick={() => confirmPallet('non_conforme')}
-                disabled={!isStable}
-                className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
-              >
-                <XCircle className="w-10 h-10 sm:w-12 sm:h-12" />
-                <span className="text-xl sm:text-2xl font-bold tracking-tight">Non conforme</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/[0.04] flex items-center justify-center">
-                <AlertTriangle className="w-7 h-7 text-amber-500/50" />
+            {/* ── Boutons Conforme / Non conforme intégrés sous le poids ── */}
+            {activeTask && (
+              <div className="mt-5 flex gap-3 relative z-10 w-full max-w-md px-4">
+                <button
+                  onClick={() => confirmPallet('conforme')}
+                  disabled={!isStable}
+                  className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
+                >
+                  <CheckCircle className="w-8 h-8" />
+                  <span className="text-lg font-bold tracking-tight">Conforme</span>
+                </button>
+                <button
+                  onClick={() => confirmPallet('non_conforme')}
+                  disabled={!isStable}
+                  className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
+                >
+                  <XCircle className="w-8 h-8" />
+                  <span className="text-lg font-bold tracking-tight">Non conforme</span>
+                </button>
               </div>
-              <span className="text-sm text-slate-500 text-center px-4">
-                Aucune tâche active.<br />
-                Revenez au pesage unitaire.
-              </span>
-            </div>
-          )}
+            )}
+
+            {!activeTask && (
+              <div className="mt-5 flex flex-col items-center gap-3 relative z-10">
+                <AlertTriangle className="w-8 h-8 text-amber-500/50" />
+                <span className="text-sm text-slate-500 text-center">
+                  Aucune tâche active.<br />
+                  Revenez au pesage unitaire.
+                </span>
+              </div>
+            )}
+          </div>
         </Panel>
       </div>
 
