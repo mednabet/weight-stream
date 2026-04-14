@@ -21,7 +21,11 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   const token = authHeader.substring(7);
   
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string };
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret || jwtSecret.length < 8) {
+      return res.status(500).json({ error: 'Configuration serveur invalide' });
+    }
+    const decoded = jwt.verify(token, jwtSecret) as { userId: string };
     
     const users = await query<any[]>(
       `SELECT u.id, u.email, ur.role 

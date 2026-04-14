@@ -10,7 +10,18 @@ setupRouter.get('/status', (_: Request, res: Response) => {
   res.json({ configured: isConfigured() });
 });
 
-setupRouter.post('/test', async (req: Request, res: Response) => {
+// ─── Guard: Block setup routes if already configured ───
+function guardSetup(_req: Request, res: Response, next: Function) {
+  if (isConfigured()) {
+    return res.status(403).json({
+      success: false,
+      error: 'L\'application est déjà configurée. Pour reconfigurer, contactez l\'administrateur système.',
+    });
+  }
+  next();
+}
+
+setupRouter.post('/test', guardSetup, async (req: Request, res: Response) => {
   const db = req.body as Partial<DbConfig>;
 
   // Basic validation
@@ -34,7 +45,7 @@ setupRouter.post('/test', async (req: Request, res: Response) => {
   }
 });
 
-setupRouter.post('/apply', async (req: Request, res: Response) => {
+setupRouter.post('/apply', guardSetup, async (req: Request, res: Response) => {
   const db = req.body as DbConfig;
 
   if (!db?.host || !db?.database || !db?.username || !db?.port || !db?.type) {

@@ -1,273 +1,155 @@
-# Guide d'Installation - Production Line Manager
-## Ubuntu Server 22.04+ avec MySQL
+# Weight Stream — Guide de déploiement Ubuntu + MySQL
+
+**Auteur :** NETPROCESS — [https://netprocess.ma](https://netprocess.ma)
+**Développeur :** Mohammed NABET — +212 661 550 618
+**Version :** 2.0.0
+**Dernière mise à jour :** Avril 2026
 
 ---
 
-## Prérequis Système
+Ce guide détaille l'installation complète de Weight Stream en production sur un serveur Ubuntu avec MySQL.
 
-- Ubuntu Server 22.04 LTS ou supérieur
-- 2 Go RAM minimum (4 Go recommandé)
-- 20 Go d'espace disque
-- Accès root ou sudo
-- Connexion Internet
+## Prérequis système
+
+Le serveur doit disposer d'Ubuntu 22.04 LTS ou supérieur, avec un minimum de 2 Go de RAM et 20 Go d'espace disque. Un accès root ou sudo est nécessaire pour l'installation des dépendances système.
 
 ---
 
-## 1. Mise à jour du système
+## 1. Installation des dépendances
+
+### Mise à jour du système
 
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
 
----
-
-## 2. Installation de Node.js 20.x
+### Node.js 22.x
 
 ```bash
-# Ajouter le repository NodeSource
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-
-# Installer Node.js
-sudo apt install -y nodejs
-
-# Vérifier l'installation
-node --version  # Doit afficher v20.x.x
-npm --version
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v  # Doit afficher v22.x
 ```
 
----
-
-## 3. Installation de MySQL 8.0
+### MySQL 8.0
 
 ```bash
-# Installer MySQL Server
-sudo apt install -y mysql-server
-
-# Sécuriser l'installation
+sudo apt-get install -y mysql-server
 sudo mysql_secure_installation
-# Répondre aux questions:
-# - VALIDATE PASSWORD component: Y (recommandé)
-# - Password strength: 2 (STRONG)
-# - Remove anonymous users: Y
-# - Disallow root login remotely: Y
-# - Remove test database: Y
-# - Reload privilege tables: Y
-
-# Démarrer et activer MySQL
-sudo systemctl start mysql
 sudo systemctl enable mysql
+sudo systemctl start mysql
 ```
 
-### Créer la base de données et l'utilisateur
+### Nginx (reverse proxy)
+
+```bash
+sudo apt-get install -y nginx
+sudo systemctl enable nginx
+```
+
+---
+
+## 2. Configuration de la base de données
+
+La base de données est créée automatiquement par l'application au premier démarrage. Il suffit de créer l'utilisateur MySQL et la base vide.
 
 ```bash
 sudo mysql -u root -p
 ```
 
 ```sql
--- Créer la base de données
 CREATE DATABASE production_manager CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- Créer l'utilisateur applicatif
-CREATE USER 'prod_app'@'localhost' IDENTIFIED BY 'VotreMotDePasseSecurise123!';
-
--- Accorder les privilèges
+CREATE USER 'prod_app'@'localhost' IDENTIFIED BY 'VOTRE_MOT_DE_PASSE_SECURISE';
 GRANT ALL PRIVILEGES ON production_manager.* TO 'prod_app'@'localhost';
 FLUSH PRIVILEGES;
-
--- Quitter
 EXIT;
 ```
 
+Les tables suivantes seront créées automatiquement au démarrage : `users`, `user_roles`, `weight_units`, `products`, `production_lines`, `terminals`, `production_tasks`, `production_items`, et `pallets`.
+
 ---
 
-## 4. Création du schéma de base de données
+## 3. Déploiement de l'application
+
+### Cloner le projet
 
 ```bash
-# Se connecter à MySQL
-mysql -u prod_app -p production_manager
+sudo mkdir -p /var/www/weight-stream
+sudo chown $USER:$USER /var/www/weight-stream
+cd /var/www/weight-stream
+git clone https://github.com/mednabet/weight-stream.git .
 ```
 
-Exécuter le script SQL suivant :
+### Build du frontend
 
-```sql
--- ============================================
--- SCHÉMA MYSQL - Production Line Manager
--- ============================================
+```bash
+npm install
+npm run build
+```
 
--- Table des rôles utilisateurs
-CREATE TABLE user_roles (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    user_id CHAR(36) NOT NULL,
-    role ENUM('operator', 'supervisor', 'admin') NOT NULL DEFAULT 'operator',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_user_role (user_id, role),
-    INDEX idx_user_id (user_id),
-    INDEX idx_role (role)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+Le build génère les fichiers statiques dans le dossier `dist/`.
 
--- Table des utilisateurs (authentification personnalisée)
-CREATE TABLE users (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    is_active TINYINT(1) NOT NULL DEFAULT 1,
-    last_sign_in_at TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_email (email),
-    INDEX idx_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+### Build du backend
 
--- Table des unités de poids
-CREATE TABLE weight_units (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    code VARCHAR(10) NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    symbol VARCHAR(10) NOT NULL,
-    decimal_precision INT NOT NULL DEFAULT 3,
-    is_default TINYINT(1) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_code (code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```bash
+cd server
+npm install --production
+npm run build
+```
 
--- Table des produits
-CREATE TABLE products (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    reference VARCHAR(100) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    target_weight DECIMAL(18,4) NOT NULL,
-    tolerance_min DECIMAL(18,4) NOT NULL,
-    tolerance_max DECIMAL(18,4) NOT NULL,
-    weight_unit_id CHAR(36),
-    is_active TINYINT(1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_reference (reference),
-    FOREIGN KEY (weight_unit_id) REFERENCES weight_units(id) ON DELETE SET NULL,
-    INDEX idx_active (is_active),
-    INDEX idx_reference (reference)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+Le build génère les fichiers compilés dans `server/dist/`.
 
--- Table des lignes de production
-CREATE TABLE production_lines (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    scale_url VARCHAR(500),
-    weight_unit_id CHAR(36),
-    is_active TINYINT(1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (weight_unit_id) REFERENCES weight_units(id) ON DELETE SET NULL,
-    INDEX idx_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+### Configuration de l'environnement
 
--- Table des terminaux
-CREATE TABLE terminals (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    device_uid VARCHAR(100) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    ip_address VARCHAR(45),
-    line_id CHAR(36),
-    is_online TINYINT(1) NOT NULL DEFAULT 0,
-    last_ping TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_device_uid (device_uid),
-    UNIQUE KEY uk_line_id (line_id),
-    FOREIGN KEY (line_id) REFERENCES production_lines(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+Créez le fichier `server/.env` à partir du modèle :
 
--- Table des tâches de production
-CREATE TABLE production_tasks (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    line_id CHAR(36) NOT NULL,
-    product_id CHAR(36) NOT NULL,
-    operator_id CHAR(36),
-    target_quantity INT NOT NULL,
-    produced_quantity INT NOT NULL DEFAULT 0,
-    status VARCHAR(50) NOT NULL DEFAULT 'pending',
-    started_at TIMESTAMP NULL,
-    completed_at TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (line_id) REFERENCES production_lines(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_line (line_id),
-    INDEX idx_status (status),
-    INDEX idx_operator (operator_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```bash
+cp server/.env.example server/.env
+nano server/.env
+```
 
--- Table des items produits
-CREATE TABLE production_items (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    task_id CHAR(36) NOT NULL,
-    sequence INT NOT NULL,
-    weight DECIMAL(18,4) NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    captured_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (task_id) REFERENCES production_tasks(id) ON DELETE CASCADE,
-    INDEX idx_task (task_id),
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+Modifiez les valeurs suivantes :
 
--- Données initiales : Unités de poids
-INSERT INTO weight_units (code, name, symbol, decimal_precision, is_default) VALUES
-('g', 'Gramme', 'g', 1, 1),
-('kg', 'Kilogramme', 'kg', 3, 0),
-('lb', 'Livre', 'lb', 3, 0),
-('oz', 'Once', 'oz', 2, 0);
+| Variable | Description | Exemple |
+|----------|-------------|---------|
+| `DB_HOST` | Hôte MySQL | `localhost` |
+| `DB_PORT` | Port MySQL | `3306` |
+| `DB_NAME` | Nom de la base | `production_manager` |
+| `DB_USER` | Utilisateur MySQL | `prod_app` |
+| `DB_PASSWORD` | Mot de passe MySQL | *(votre mot de passe)* |
+| `PORT` | Port du serveur API | `3001` |
+| `NODE_ENV` | Environnement | `production` |
+| `CORS_ORIGIN` | Origines autorisées | `https://votre-domaine.com` |
+| `JWT_SECRET` | Clé secrète JWT (min 32 car.) | *(générer avec openssl)* |
 
--- Créer le premier administrateur (mot de passe: Admin123!)
--- Le hash correspond à 'Admin123!' avec bcrypt
-INSERT INTO users (id, email, password_hash, is_active) VALUES
-(UUID(), 'admin@production.local', '$2b$10$rOzJqQZQZQZQZQZQZQZQZuExample.HashHere', 1);
+Pour générer une clé JWT sécurisée :
 
--- Associer le rôle admin
-INSERT INTO user_roles (user_id, role)
-SELECT id, 'admin' FROM users WHERE email = 'admin@production.local';
+```bash
+openssl rand -base64 64
 ```
 
 ---
 
-## 5. Installation de Nginx (Reverse Proxy)
+## 4. Configuration Nginx
+
+Créez le fichier de configuration Nginx :
 
 ```bash
-sudo apt install -y nginx
-
-# Activer et démarrer Nginx
-sudo systemctl enable nginx
-sudo systemctl start nginx
+sudo nano /etc/nginx/sites-available/weight-stream
 ```
-
-### Configuration Nginx
-
-```bash
-sudo nano /etc/nginx/sites-available/production-manager
-```
-
-Contenu :
 
 ```nginx
 server {
     listen 80;
-    server_name votre-domaine.com;  # Remplacer par votre domaine ou IP
+    server_name votre-domaine.com;
 
-    # Redirection HTTP vers HTTPS (décommenter si SSL configuré)
-    # return 301 https://$server_name$request_uri;
+    # Frontend (fichiers statiques)
+    root /var/www/weight-stream/dist;
+    index index.html;
 
-    location / {
-        root /var/www/production-manager/dist;
-        index index.html;
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api {
-        proxy_pass http://127.0.0.1:3000;
+    # API backend (port 3001)
+    location /api/ {
+        proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -276,285 +158,209 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 30s;
+    }
+
+    # SPA fallback
+    location / {
+        try_files $uri $uri/ /index.html;
     }
 
     # Sécurité
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
 }
 ```
 
+Activez le site et redémarrez Nginx :
+
 ```bash
-# Activer le site
-sudo ln -s /etc/nginx/sites-available/production-manager /etc/nginx/sites-enabled/
-
-# Supprimer le site par défaut
-sudo rm /etc/nginx/sites-enabled/default
-
-# Tester la configuration
+sudo ln -s /etc/nginx/sites-available/weight-stream /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
-
-# Recharger Nginx
-sudo systemctl reload nginx
+sudo systemctl restart nginx
 ```
 
 ---
 
-## 6. Installation SSL avec Let's Encrypt (Optionnel mais recommandé)
+## 5. SSL avec Let's Encrypt (recommandé)
 
 ```bash
-sudo apt install -y certbot python3-certbot-nginx
-
-# Obtenir le certificat
+sudo apt-get install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d votre-domaine.com
-
-# Renouvellement automatique (vérifié)
 sudo certbot renew --dry-run
 ```
 
----
-
-## 7. Déploiement de l'application
-
-### Créer le répertoire d'installation
-
-```bash
-sudo mkdir -p /var/www/production-manager
-sudo chown $USER:$USER /var/www/production-manager
-```
-
-### Cloner et construire l'application
-
-```bash
-cd /var/www/production-manager
-
-# Cloner depuis GitHub
-git clone https://github.com/mednabet/weight-stream.git .
-
-# Installer les dépendances
-npm install
-
-# Créer le fichier de configuration
-cp .env.example .env
-nano .env
-```
-
-### Configuration de l'environnement (.env)
-
-```env
-# Base de données MySQL
-DB_TYPE=mysql
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=production_manager
-DB_USER=prod_app
-DB_PASSWORD=VotreMotDePasseSecurise123!
-
-# Application
-VITE_APP_URL=https://votre-domaine.com
-VITE_API_URL=https://votre-domaine.com/api
-
-# Sécurité
-JWT_SECRET=VotreCleSecreteTresLongueEtComplexe123!@#
-SESSION_TIMEOUT=480
-
-# Environnement
-NODE_ENV=production
-```
-
-### Construire pour la production
-
-```bash
-npm run build
-```
+Certbot modifiera automatiquement la configuration Nginx pour activer HTTPS.
 
 ---
 
-## 8. Service Systemd pour l'API
+## 6. Service systemd
+
+Créez le service pour démarrer le backend automatiquement :
 
 ```bash
-sudo nano /etc/systemd/system/production-api.service
+sudo nano /etc/systemd/system/weight-stream.service
 ```
-
-Contenu :
 
 ```ini
 [Unit]
-Description=Production Manager API
+Description=Weight Stream API Server
 After=network.target mysql.service
 
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/var/www/production-manager
-ExecStart=/usr/bin/node /var/www/production-manager/api/server.js
+WorkingDirectory=/var/www/weight-stream/server
+ExecStart=/usr/bin/node dist/index.js
 Restart=on-failure
 RestartSec=10
 StandardOutput=syslog
 StandardError=syslog
-SyslogIdentifier=production-api
+SyslogIdentifier=weight-stream
 Environment=NODE_ENV=production
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+Activez et démarrez le service :
+
 ```bash
-# Recharger systemd
+sudo chown -R www-data:www-data /var/www/weight-stream
 sudo systemctl daemon-reload
-
-# Démarrer et activer le service
-sudo systemctl start production-api
-sudo systemctl enable production-api
-
-# Vérifier le statut
-sudo systemctl status production-api
+sudo systemctl enable weight-stream
+sudo systemctl start weight-stream
+sudo systemctl status weight-stream
 ```
 
 ---
 
-## 9. Configuration du Pare-feu
+## 7. Pare-feu
 
 ```bash
-# Autoriser HTTP et HTTPS
-sudo ufw allow 'Nginx Full'
-
-# Autoriser SSH (important!)
 sudo ufw allow ssh
-
-# Activer le pare-feu
+sudo ufw allow 'Nginx Full'
 sudo ufw enable
-
-# Vérifier le statut
-sudo ufw status
 ```
+
+Le port 3001 ne doit pas être ouvert publiquement car Nginx fait office de reverse proxy.
 
 ---
 
-## 10. Sauvegardes Automatiques
+## 8. Premier accès
 
-### Script de sauvegarde MySQL
+Après le démarrage, accédez à `https://votre-domaine.com`. Le premier utilisateur qui s'inscrit devient automatiquement administrateur. L'inscription publique est ensuite désactivée automatiquement. Les comptes suivants doivent être créés par un administrateur via l'interface de gestion.
+
+---
+
+## 9. Sauvegardes
+
+Configurez une sauvegarde quotidienne de la base de données :
 
 ```bash
-sudo nano /usr/local/bin/backup-production-db.sh
+sudo nano /etc/cron.daily/weight-stream-backup
 ```
 
 ```bash
 #!/bin/bash
-# Script de sauvegarde MySQL
-
-BACKUP_DIR="/var/backups/mysql"
-DATE=$(date +%Y%m%d_%H%M%S)
-DB_NAME="production_manager"
-DB_USER="prod_app"
-DB_PASS="VotreMotDePasseSecurise123!"
-
-# Créer le répertoire si nécessaire
-mkdir -p $BACKUP_DIR
-
-# Effectuer la sauvegarde
-mysqldump -u $DB_USER -p$DB_PASS $DB_NAME | gzip > $BACKUP_DIR/${DB_NAME}_${DATE}.sql.gz
-
-# Supprimer les sauvegardes de plus de 30 jours
-find $BACKUP_DIR -name "*.sql.gz" -mtime +30 -delete
-
-echo "Sauvegarde terminée: ${DB_NAME}_${DATE}.sql.gz"
+BACKUP_DIR="/var/backups/weight-stream"
+mkdir -p "$BACKUP_DIR"
+mysqldump -u prod_app -p'VOTRE_MOT_DE_PASSE' production_manager | gzip > "$BACKUP_DIR/db_$(date +%Y%m%d_%H%M%S).sql.gz"
+# Conserver les 30 derniers jours
+find "$BACKUP_DIR" -name "db_*.sql.gz" -mtime +30 -delete
 ```
 
 ```bash
-# Rendre exécutable
-sudo chmod +x /usr/local/bin/backup-production-db.sh
-
-# Ajouter au cron (sauvegarde quotidienne à 2h)
-sudo crontab -e
+sudo chmod +x /etc/cron.daily/weight-stream-backup
 ```
 
-Ajouter la ligne :
-```
-0 2 * * * /usr/local/bin/backup-production-db.sh >> /var/log/mysql-backup.log 2>&1
+Pour restaurer une sauvegarde :
+
+```bash
+gunzip < /var/backups/weight-stream/db_YYYYMMDD_HHMMSS.sql.gz | mysql -u prod_app -p production_manager
 ```
 
 ---
 
-## 11. Monitoring et Logs
+## 10. Surveillance
 
-### Vérifier les logs
-
-```bash
-# Logs Nginx
-sudo tail -f /var/log/nginx/access.log
-sudo tail -f /var/log/nginx/error.log
-
-# Logs API
-sudo journalctl -u production-api -f
-
-# Logs MySQL
-sudo tail -f /var/log/mysql/error.log
-```
-
-### Installation de htop (monitoring système)
+Vérifiez l'état du service et consultez les logs :
 
 ```bash
-sudo apt install -y htop
-htop
+# État du service
+sudo systemctl status weight-stream
+
+# Logs en temps réel
+sudo journalctl -u weight-stream -f
+
+# Health check API
+curl -s http://localhost:3001/api/health
 ```
 
 ---
 
-## 12. Commandes Utiles
+## 11. Mise à jour
+
+Pour mettre à jour l'application :
 
 ```bash
-# Redémarrer tous les services
-sudo systemctl restart nginx production-api mysql
-
-# Vérifier l'état des services
-sudo systemctl status nginx production-api mysql
-
-# Mettre à jour l'application
-cd /var/www/production-manager
-git pull
-npm install
-npm run build
-sudo systemctl restart production-api
-
-# Restaurer une sauvegarde
-gunzip < /var/backups/mysql/production_manager_YYYYMMDD_HHMMSS.sql.gz | mysql -u prod_app -p production_manager
+cd /var/www/weight-stream
+git pull origin main
+npm install && npm run build
+cd server && npm install --production && npm run build
+sudo systemctl restart weight-stream
 ```
+
+---
+
+## Sécurité en production
+
+L'application intègre les mesures de sécurité suivantes en mode production :
+
+| Mesure | Détail |
+|--------|--------|
+| **JWT obligatoire** | Le serveur refuse de démarrer si `JWT_SECRET` n'est pas défini (min 32 caractères) |
+| **Helmet** | Headers de sécurité HTTP (X-Frame-Options, HSTS, X-Content-Type-Options, etc.) |
+| **Rate limiting** | 500 req/15min global, 15 req/15min sur login/signup |
+| **CORS strict** | Seules les origines configurées sont autorisées (pas de wildcard) |
+| **Setup verrouillé** | Les routes de configuration sont bloquées après la première installation |
+| **Signup verrouillé** | L'inscription publique est désactivée après le premier administrateur |
+| **Proxy balance sécurisé** | Seules les URLs configurées dans les lignes de production sont autorisées |
+| **Bcrypt 12 rounds** | Hachage des mots de passe avec 12 rounds de salage |
+| **Validation mot de passe** | Minimum 12 caractères, majuscule, minuscule, chiffre, caractère spécial |
+| **Trust proxy** | Configuration correcte pour fonctionner derrière Nginx |
 
 ---
 
 ## Dépannage
 
 ### MySQL ne démarre pas
+
 ```bash
 sudo journalctl -u mysql -n 50
-sudo mysqld --verbose --help | grep -A 1 "Default options"
 ```
 
 ### Nginx erreur 502
+
 ```bash
-# Vérifier que l'API est en cours d'exécution
-sudo systemctl status production-api
-# Vérifier les logs
-sudo journalctl -u production-api -n 50
+sudo systemctl status weight-stream
+sudo journalctl -u weight-stream -n 50
 ```
 
+### Le serveur refuse de démarrer (JWT_SECRET)
+
+En production, le serveur exige que la variable `JWT_SECRET` soit définie et contienne au moins 32 caractères. Vérifiez le fichier `server/.env`.
+
 ### Permission refusée
+
 ```bash
-# Vérifier les permissions
-ls -la /var/www/production-manager
-# Corriger si nécessaire
-sudo chown -R www-data:www-data /var/www/production-manager
+sudo chown -R www-data:www-data /var/www/weight-stream
 ```
 
 ---
 
 ## Contact Support
 
-En cas de problème, créez un ticket sur le repository GitHub ou contactez l'équipe de support.
-
----
-
-**Version:** 1.0.0  
-**Dernière mise à jour:** Décembre 2024
+**NETPROCESS** — [https://netprocess.ma](https://netprocess.ma)
+**Mohammed NABET** — +212 661 550 618

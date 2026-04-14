@@ -8,6 +8,14 @@ import { validatePassword, validateEmail } from '../middleware/validation.js';
 
 export const authRouter = Router();
 
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 8) {
+    throw new Error('JWT_SECRET is not configured properly');
+  }
+  return secret;
+}
+
 // Login
 authRouter.post('/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -44,7 +52,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
     const token = jwt.sign(
       { userId: user.id },
-      process.env.JWT_SECRET || 'secret',
+      getJwtSecret(),
       { expiresIn: '8h' }
     );
 
@@ -62,7 +70,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-// Signup (only for initial admin setup)
+// Signup (only for initial admin setup — disabled after first admin exists)
 authRouter.post('/signup', async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
@@ -83,12 +91,18 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
   }
 
   try {
-    // Check if any admin exists
+    // Check if any admin exists — if so, block public signup
     const admins = await query<any[]>(
       "SELECT COUNT(*) as count FROM user_roles WHERE role = 'admin'"
     );
 
-    const isFirstUser = parseInt(admins[0].count) === 0;
+    const adminCount = parseInt(admins[0].count);
+
+    if (adminCount > 0) {
+      return res.status(403).json({
+        error: 'L\'inscription publique est désactivée. Contactez un administrateur pour créer un compte.'
+      });
+    }
 
     const existing = await query<any[]>(
       'SELECT id FROM users WHERE email = ?',
@@ -100,7 +114,7 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
     }
 
     const userId = uuidv4();
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12); // Increased from 10 to 12 rounds
 
     await query(
       'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
@@ -108,21 +122,20 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
     );
 
     // First user becomes admin
-    const role = isFirstUser ? 'admin' : 'operator';
     await query(
       'INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)',
-      [uuidv4(), userId, role]
+      [uuidv4(), userId, 'admin']
     );
 
     const token = jwt.sign(
       { userId },
-      process.env.JWT_SECRET || 'secret',
+      getJwtSecret(),
       { expiresIn: '8h' }
     );
 
     res.json({
       access_token: token,
-      user: { id: userId, email, role }
+      user: { id: userId, email, role: 'admin' }
     });
   } catch (err) {
     console.error('Signup error:', err);
