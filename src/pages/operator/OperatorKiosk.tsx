@@ -517,7 +517,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
 
                 {/* ── Boutons Conforme / Non conforme intégrés sous le poids ── */}
                 {isTaskRunning && (
-                  <div className="mt-5 flex gap-3 relative z-10 w-full max-w-md px-4">
+                  <div className="mt-5 flex gap-4 relative z-10 w-full px-6">
                     <button
                       onClick={() => confirmWeighing('conforme')}
                       disabled={!isStable}
