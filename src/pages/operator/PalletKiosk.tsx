@@ -255,6 +255,16 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     sensor.weight.status === 'unstable' ? 'Instable' :
     sensor.weight.status === 'error' ? 'Erreur' : 'Hors ligne';
 
+  // === Indicateur automatique de l'état du poids palette par rapport aux tolérances ===
+  const palletWeightState = useMemo(() => {
+    if (!activeTask?.pallet_target_weight || !activeTask?.pallet_tolerance_min || !activeTask?.pallet_tolerance_max) return null;
+    const w = sensor.weight.value;
+    if (w === 0) return null;
+    if (w < activeTask.pallet_tolerance_min) return { label: 'Sous-poids', color: 'text-blue-400', bg: 'bg-blue-500/20 border-blue-500/50', icon: '▼' };
+    if (w > activeTask.pallet_tolerance_max) return { label: 'Surpoids', color: 'text-red-400', bg: 'bg-red-500/20 border-red-500/50', icon: '▲' };
+    return { label: 'Dans la tolérance', color: 'text-green-400', bg: 'bg-green-500/20 border-green-500/50', icon: '●' };
+  }, [sensor.weight.value, activeTask?.pallet_target_weight, activeTask?.pallet_tolerance_min, activeTask?.pallet_tolerance_max]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
 
@@ -324,7 +334,7 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
 
           {/* Pallet target info */}
           {activeTask?.pallet_target_weight && (
-            <div className="mt-2 text-sm text-muted-foreground">
+            <div className="mt-1 text-sm text-muted-foreground">
               Cible palette: <span className="font-mono font-medium text-foreground">{activeTask.pallet_target_weight}</span>
               {activeTask.pallet_tolerance_min && (
                 <>
@@ -334,6 +344,12 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
                   Max: <span className="font-mono">{activeTask.pallet_tolerance_max}</span>
                 </>
               )}
+            </div>
+          )}
+
+          {palletWeightState && (
+            <div className={`mt-1 px-4 py-1 rounded-lg border text-sm font-semibold ${palletWeightState.bg} ${palletWeightState.color}`}>
+              {palletWeightState.icon} {palletWeightState.label}
             </div>
           )}
 

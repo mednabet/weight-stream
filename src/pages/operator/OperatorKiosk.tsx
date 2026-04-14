@@ -206,6 +206,16 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     sensor.weight.status === 'unstable' ? 'Instable' :
     sensor.weight.status === 'error' ? 'Erreur' : 'Hors ligne';
 
+  // === Indicateur automatique de l'état du poids par rapport aux tolérances ===
+  const weightState = useMemo(() => {
+    if (!activeTask?.target_weight || !activeTask?.tolerance_min || !activeTask?.tolerance_max) return null;
+    const w = sensor.weight.value;
+    if (w === 0) return null;
+    if (w < activeTask.tolerance_min) return { label: 'Sous-poids', color: 'text-blue-400', bg: 'bg-blue-500/20 border-blue-500/50', icon: '▼' };
+    if (w > activeTask.tolerance_max) return { label: 'Surpoids', color: 'text-red-400', bg: 'bg-red-500/20 border-red-500/50', icon: '▲' };
+    return { label: 'Dans la tolérance', color: 'text-green-400', bg: 'bg-green-500/20 border-green-500/50', icon: '●' };
+  }, [sensor.weight.value, activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
+
   const progressPct = activeTask ? Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100) : 0;
 
   return (
@@ -304,12 +314,18 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
               </div>
 
               {activeTask?.target_weight && (
-                <div className="mt-2 text-sm text-muted-foreground">
+                <div className="mt-1 text-sm text-muted-foreground">
                   Cible: <span className="font-mono font-medium text-foreground">{activeTask.target_weight}</span>
                   <span className="mx-1">|</span>
                   Min: <span className="font-mono">{activeTask.tolerance_min}</span>
                   <span className="mx-1">—</span>
                   Max: <span className="font-mono">{activeTask.tolerance_max}</span>
+                </div>
+              )}
+
+              {weightState && (
+                <div className={`mt-1 px-4 py-1 rounded-lg border text-sm font-semibold ${weightState.bg} ${weightState.color}`}>
+                  {weightState.icon} {weightState.label}
                 </div>
               )}
 

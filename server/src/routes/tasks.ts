@@ -11,6 +11,8 @@ tasksRouter.get('/', async (_: AuthRequest, res: Response) => {
   try {
     const tasks = await query<any[]>(`
       SELECT pt.*, p.name as product_name, p.reference as product_reference,
+             p.target_weight, p.tolerance_min, p.tolerance_max,
+             p.units_per_pallet, p.pallet_target_weight, p.pallet_tolerance_min, p.pallet_tolerance_max,
              pl.name as line_name, u.email as operator_email
       FROM production_tasks pt
       LEFT JOIN products p ON pt.product_id = p.id
