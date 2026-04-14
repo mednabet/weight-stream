@@ -146,6 +146,60 @@ tasksRouter.get('/:id/items', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Reopen last completed task (set back to in_progress)
+tasksRouter.put('/:id/reopen', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    // Verify task exists and is completed
+    const taskResult = await query<any[]>('SELECT * FROM production_tasks WHERE id = ?', [id]);
+    if (!taskResult.length) {
+      return res.status(404).json({ error: 'Tâche introuvable' });
+    }
+    if (taskResult[0].status !== 'completed') {
+      return res.status(400).json({ error: 'Seule une tâche terminée peut être réouverte' });
+    }
+
+    await query(
+      `UPDATE production_tasks SET status = 'in_progress', completed_at = NULL, operator_id = COALESCE(?, operator_id) WHERE id = ?`,
+      [req.user?.id || null, id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reopen task error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Delete last production item for a task
+tasksRouter.delete('/:id/items/last', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    // Find the last item by sequence
+    const lastItem = await query<any[]>(
+      'SELECT id FROM production_items WHERE task_id = ? ORDER BY sequence DESC LIMIT 1',
+      [id]
+    );
+    if (!lastItem.length) {
+      return res.status(404).json({ error: 'Aucun pesage à supprimer' });
+    }
+
+    await query('DELETE FROM production_items WHERE id = ?', [lastItem[0].id]);
+
+    // Decrement produced_quantity
+    await query(
+      'UPDATE production_tasks SET produced_quantity = GREATEST(produced_quantity - 1, 0) WHERE id = ?',
+      [id]
+    );
+
+    res.json({ success: true, deleted_id: lastItem[0].id });
+  } catch (err) {
+    console.error('Delete last item error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // Delete task
 tasksRouter.delete('/:id', requireRole('admin', 'supervisor'), async (req: AuthRequest, res: Response) => {
   const { id } = req.params;

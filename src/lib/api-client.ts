@@ -348,6 +348,21 @@ class ApiClient {
   async getPalletTicket(id: string) {
     return this.request<any>(`/pallets/${id}/ticket`);
   }
+
+  // Reopen a completed task
+  async reopenTask(id: string) {
+    return this.request(`/tasks/${id}/reopen`, { method: 'PUT' });
+  }
+
+  // Delete last production item (unit weighing)
+  async deleteLastProductionItem(taskId: string) {
+    return this.request(`/tasks/${taskId}/items/last`, { method: 'DELETE' });
+  }
+
+  // Delete last pallet for a task
+  async deleteLastPallet(taskId: string) {
+    return this.request(`/pallets/task/${taskId}/last`, { method: 'DELETE' });
+  }
 }
 
 export const apiClient = new ApiClient();

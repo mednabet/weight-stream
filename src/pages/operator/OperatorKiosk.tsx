@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Play, Pause, CheckCircle, XCircle, LogOut, Scale, Maximize, Minimize, Square, PlusCircle, Package, Activity, TrendingUp, Clock, ChevronRight } from 'lucide-react';
+import { Play, Pause, CheckCircle, XCircle, LogOut, Scale, Maximize, Minimize, Square, PlusCircle, Package, Activity, TrendingUp, Clock, ChevronRight, Undo2, Trash2, RotateCcw } from 'lucide-react';
 import { PalletKiosk } from './PalletKiosk';
 
 interface Line { id: string; name: string; status?: string; scale_url?: string | null; pallet_scale_url?: string | null }
@@ -187,6 +187,35 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       toast({ title: label, description: `Poids: ${weight.toFixed(3)}` });
     } catch (e: any) {
       toast({ title: 'Erreur', description: e?.message || "Impossible d'enregistrer", variant: 'destructive' });
+    }
+  };
+
+  // Reopen last completed task
+  const lastCompletedTask = useMemo(() => {
+    return tasks.find(t => t.status === 'completed');
+  }, [tasks]);
+
+  const reopenLastTask = async () => {
+    if (!lastCompletedTask) return;
+    try {
+      await apiClient.reopenTask(lastCompletedTask.id);
+      await loadTasks(lineId);
+      toast({ title: 'Tâche réouverte', description: `La tâche "${lastCompletedTask.product_name}" a été réouverte.` });
+    } catch (e: any) {
+      toast({ title: 'Erreur', description: e?.message || 'Impossible de réouvrir la tâche', variant: 'destructive' });
+    }
+  };
+
+  // Delete last production item
+  const deleteLastItem = async () => {
+    if (!activeTaskId || recentItems.length === 0) return;
+    try {
+      await apiClient.deleteLastProductionItem(activeTaskId);
+      await loadTasks(lineId);
+      await loadRecentItems(activeTaskId);
+      toast({ title: 'Pesage supprimé', description: 'Le dernier pesage a été supprimé.' });
+    } catch (e: any) {
+      toast({ title: 'Erreur', description: e?.message || 'Impossible de supprimer le pesage', variant: 'destructive' });
     }
   };
 
@@ -502,13 +531,24 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                     <Scale className="w-7 h-7 text-slate-600" />
                   </div>
                   <span className="text-sm text-slate-500 text-center px-4">Aucune tâche active</span>
-                  <button
-                    onClick={() => setShowCreateTask(!showCreateTask)}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-sm font-semibold hover:bg-indigo-500/25 active:scale-[0.97] transition-all touch-manipulation"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    Nouvelle tâche
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => setShowCreateTask(!showCreateTask)}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-sm font-semibold hover:bg-indigo-500/25 active:scale-[0.97] transition-all touch-manipulation"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      Nouvelle tâche
+                    </button>
+                    {lastCompletedTask && (
+                      <button
+                        onClick={reopenLastTask}
+                        className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-semibold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Réouvrir dernière tâche
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center rounded-2xl bg-white/[0.02] border border-white/[0.06]">
@@ -540,9 +580,20 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                 <Clock className="w-3.5 h-3.5 text-slate-500" />
                 <span className="text-xs text-slate-400 font-medium">Derniers pesages</span>
               </div>
-              {stats.total > 0 && (
-                <span className="text-[10px] text-slate-500 font-mono">{stats.total} total</span>
-              )}
+              <div className="flex items-center gap-2">
+                {recentItems.length > 0 && isTaskActive && (
+                  <button
+                    onClick={deleteLastItem}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-[10px] font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                  >
+                    <Undo2 className="w-3 h-3" />
+                    Supprimer dernier
+                  </button>
+                )}
+                {stats.total > 0 && (
+                  <span className="text-[10px] text-slate-500 font-mono">{stats.total} total</span>
+                )}
+              </div>
             </div>
             {recentItems.length > 0 ? (
               <div className="flex gap-1.5 overflow-x-auto px-3 py-2 h-[calc(100%-36px)]">

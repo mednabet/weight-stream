@@ -180,6 +180,26 @@ palletsRouter.post('/', requireRole('operator', 'supervisor', 'admin'), async (r
   }
 });
 
+// DELETE /pallets/task/:taskId/last — Delete the last pallet for a task (kiosk use)
+palletsRouter.delete('/task/:taskId/last', requireRole('operator', 'supervisor', 'admin'), async (req: Request, res: Response) => {
+  try {
+    const pool = getPool();
+    const [rows]: any = await pool.query(
+      'SELECT id FROM pallets WHERE task_id = ? ORDER BY pallet_number DESC LIMIT 1',
+      [req.params.taskId]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Aucune palette à supprimer' });
+    }
+    const lastPalletId = rows[0].id;
+    await pool.query('DELETE FROM pallets WHERE id = ?', [lastPalletId]);
+    res.json({ success: true, deleted_id: lastPalletId });
+  } catch (err: any) {
+    console.error('Error deleting last pallet:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /pallets/:id — Delete a pallet
 palletsRouter.delete('/:id', requireRole('supervisor', 'admin'), async (req: Request, res: Response) => {
   try {

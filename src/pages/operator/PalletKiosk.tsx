@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import {
   CheckCircle, XCircle, Scale, Package, ArrowLeft,
-  Printer, AlertTriangle, Info, Clock, TrendingUp, Layers, BarChart3
+  Printer, AlertTriangle, Info, Clock, TrendingUp, Layers, BarChart3, Undo2
 } from 'lucide-react';
 
 interface Line {
@@ -177,6 +177,18 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
       }
     } catch (e: any) {
       toast({ title: 'Erreur', description: e?.message || "Impossible d'enregistrer la palette", variant: 'destructive' });
+    }
+  };
+
+  // Delete last pallet
+  const deleteLastPallet = async () => {
+    if (!activeTaskId || pallets.length === 0) return;
+    try {
+      await apiClient.deleteLastPallet(activeTaskId);
+      await loadPallets(activeTaskId);
+      toast({ title: 'Palette supprimée', description: 'La dernière palette a été supprimée.' });
+    } catch (e: any) {
+      toast({ title: 'Erreur', description: e?.message || 'Impossible de supprimer la palette', variant: 'destructive' });
     }
   };
 
@@ -499,9 +511,20 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
             <Package className="w-3.5 h-3.5 text-violet-400/60" />
             <span className="text-xs text-slate-400 font-medium">Dernières palettes</span>
           </div>
-          {pallets.length > 0 && (
-            <span className="text-[10px] text-slate-500 font-mono">{pallets.length} total</span>
-          )}
+          <div className="flex items-center gap-2">
+            {pallets.length > 0 && activeTask && (
+              <button
+                onClick={deleteLastPallet}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-[10px] font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
+              >
+                <Undo2 className="w-3 h-3" />
+                Supprimer dernière
+              </button>
+            )}
+            {pallets.length > 0 && (
+              <span className="text-[10px] text-slate-500 font-mono">{pallets.length} total</span>
+            )}
+          </div>
         </div>
         {pallets.length > 0 ? (
           <div className="flex gap-1.5 overflow-x-auto px-3 py-2 h-[calc(100%-36px)]">
