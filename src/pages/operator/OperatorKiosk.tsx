@@ -292,14 +292,14 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
           <div className="flex-1 flex gap-2 min-h-0">
 
             {/* LEFT: Weight Display */}
-            <div className={`flex-1 rounded-xl border-2 p-4 flex flex-col items-center justify-center transition-all duration-300 ${weightBorderColor}`}>
+            <div className={`flex-1 rounded-xl border-2 p-2 flex flex-col items-center justify-center transition-all duration-300 ${weightBorderColor}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Scale className={`w-5 h-5 ${weightColor}`} />
                 <span className="text-sm text-muted-foreground">Poids actuel</span>
                 <Badge className={`${badgeColor} text-xs`}>{badgeLabel}</Badge>
               </div>
 
-              <div className={`text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold font-mono leading-none tracking-tight transition-colors duration-300 ${weightColor} ${sensor.weight.status === 'unstable' ? 'animate-pulse' : ''}`}>
+              <div className={`text-5xl sm:text-6xl md:text-7xl font-bold font-mono leading-none tracking-tight transition-colors duration-300 ${weightColor} ${sensor.weight.status === 'unstable' ? 'animate-pulse' : ''}`}>
                 {sensor.weight.value.toFixed(3)}
               </div>
 
