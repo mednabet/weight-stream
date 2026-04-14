@@ -2,11 +2,9 @@
 
 export type UserRole = 'admin' | 'supervisor' | 'operator';
 
-export type LineState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'CAPTURING' | 'COOLDOWN' | 'ERROR';
+export type LineState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'ERROR';
 
 export type WeightStatus = 'stable' | 'unstable' | 'error' | 'offline' | 'disconnected';
-
-export type PhotocellState = 0 | 1;
 
 export interface User {
   id: string;
@@ -65,8 +63,6 @@ export interface ProductionLine {
   code?: string;
   scale_url?: string | null;
   balanceUrl?: string;
-  photocell_url?: string | null;
-  photocellUrl?: string;
   state?: LineState;
   is_active: boolean;
   isActive?: boolean;
@@ -110,7 +106,7 @@ export interface ProductionItem {
   task_id: string;
   taskId?: string;
   weight: number;
-  status: 'ok' | 'underweight' | 'overweight';
+  status: 'conforme' | 'non_conforme';
   captured_at: string;
   capturedAt?: string;
   sequence: number;
@@ -121,10 +117,8 @@ export interface LineStatus {
   balance: Balance;
   terminal?: Terminal;
   currentWeight: WeightReading;
-  photocellState: PhotocellState;
   activeTask?: ProductionTask;
   lastItems: ProductionItem[];
-  captureState: 'idle' | 'armed' | 'capturing' | 'cooldown';
 }
 
 export interface AuditLog {
@@ -140,7 +134,7 @@ export interface AuditLog {
 
 // WebSocket message types
 export interface WSMessage {
-  type: 'weight_update' | 'photocell_update' | 'capture_event' | 'task_update' | 'line_state_change';
+  type: 'weight_update' | 'task_update' | 'line_state_change';
   lineId: string;
   payload: unknown;
   timestamp: number;
@@ -149,10 +143,6 @@ export interface WSMessage {
 export interface WeightUpdatePayload {
   weight: number;
   status: WeightStatus;
-}
-
-export interface PhotocellUpdatePayload {
-  state: PhotocellState;
 }
 
 export interface CaptureEventPayload {

@@ -59,7 +59,6 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
-          photocell_url: string | null
           scale_url: string | null
           updated_at: string
           weight_unit_id: string | null
@@ -70,7 +69,6 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
-          photocell_url?: string | null
           scale_url?: string | null
           updated_at?: string
           weight_unit_id?: string | null
@@ -81,7 +79,6 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
-          photocell_url?: string | null
           scale_url?: string | null
           updated_at?: string
           weight_unit_id?: string | null

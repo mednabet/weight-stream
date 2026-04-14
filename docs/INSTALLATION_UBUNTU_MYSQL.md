@@ -156,7 +156,6 @@ CREATE TABLE production_lines (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     scale_url VARCHAR(500),
-    photocell_url VARCHAR(500),
     weight_unit_id CHAR(36),
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

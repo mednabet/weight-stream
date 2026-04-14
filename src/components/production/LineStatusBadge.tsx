@@ -1,6 +1,6 @@
 import { LineState } from '@/types/production';
 import { cn } from '@/lib/utils';
-import { Play, Pause, Square, Zap, AlertCircle, Loader2 } from 'lucide-react';
+import { Play, Pause, Square, AlertCircle } from 'lucide-react';
 
 interface LineStatusBadgeProps {
   state: LineState;
@@ -27,16 +27,6 @@ const stateConfig: Record<LineState, {
   PAUSED: { 
     label: 'En pause', 
     icon: Pause,
-    badgeClass: 'line-badge-paused'
-  },
-  CAPTURING: { 
-    label: 'Capture', 
-    icon: Zap,
-    badgeClass: 'line-badge-active'
-  },
-  COOLDOWN: { 
-    label: 'Cooldown', 
-    icon: Loader2,
     badgeClass: 'line-badge-paused'
   },
   ERROR: { 
@@ -70,10 +60,7 @@ export function LineStatusBadge({ state, size = 'md', showIcon = true, className
       className
     )}>
       {showIcon && (
-        <Icon className={cn(
-          iconSizes[size],
-          state === 'COOLDOWN' && 'animate-spin'
-        )} />
+        <Icon className={iconSizes[size]} />
       )}
       <span className="font-semibold">{config.label}</span>
     </div>

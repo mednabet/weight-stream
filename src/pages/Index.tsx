@@ -37,7 +37,7 @@ const Index = () => {
             </h1>
             
             <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-8 sm:mb-10 md:mb-12 max-w-2xl mx-auto px-2">
-              Système de pesage automatique avec détection par photocellule. 
+              Système de pesage avec confirmation manuelle par l'opérateur. 
               Interface tactile optimisée pour les opérateurs et tableau de bord temps réel pour les superviseurs.
             </p>
 

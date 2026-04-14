@@ -3,7 +3,7 @@ CREATE TABLE public.production_items (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   task_id UUID NOT NULL REFERENCES public.production_tasks(id) ON DELETE CASCADE,
   weight NUMERIC NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('ok', 'underweight', 'overweight')),
+  status TEXT NOT NULL CHECK (status IN ('conforme', 'non_conforme')),
   sequence INTEGER NOT NULL,
   captured_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()

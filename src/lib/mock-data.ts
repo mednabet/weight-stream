@@ -68,9 +68,9 @@ export const mockProducts: Product[] = [
 
 // Mock Production Lines
 export const mockLines: ProductionLine[] = [
-  { id: 'line-1', name: 'Ligne 1 - Assemblage', code: 'L1', scale_url: 'http://pc-line1/poids/poids.txt', balanceUrl: 'http://pc-line1/poids/poids.txt', photocell_url: 'http://pc-line1/io/photocellule.txt', photocellUrl: 'http://pc-line1/io/photocellule.txt', state: 'RUNNING', is_active: true, isActive: true },
-  { id: 'line-2', name: 'Ligne 2 - Moulage', code: 'L2', scale_url: 'http://pc-line2/poids/poids.txt', balanceUrl: 'http://pc-line2/poids/poids.txt', photocell_url: 'http://pc-line2/io/photocellule.txt', photocellUrl: 'http://pc-line2/io/photocellule.txt', state: 'PAUSED', is_active: true, isActive: true },
-  { id: 'line-3', name: 'Ligne 3 - Finition', code: 'L3', scale_url: 'http://pc-line3/poids/poids.txt', balanceUrl: 'http://pc-line3/poids/poids.txt', photocell_url: 'http://pc-line3/io/photocellule.txt', photocellUrl: 'http://pc-line3/io/photocellule.txt', state: 'IDLE', is_active: true, isActive: true },
+  { id: 'line-1', name: 'Ligne 1 - Assemblage', code: 'L1', scale_url: 'http://pc-line1/poids/poids.txt', balanceUrl: 'http://pc-line1/poids/poids.txt', state: 'RUNNING', is_active: true, isActive: true },
+  { id: 'line-2', name: 'Ligne 2 - Moulage', code: 'L2', scale_url: 'http://pc-line2/poids/poids.txt', balanceUrl: 'http://pc-line2/poids/poids.txt', state: 'PAUSED', is_active: true, isActive: true },
+  { id: 'line-3', name: 'Ligne 3 - Finition', code: 'L3', scale_url: 'http://pc-line3/poids/poids.txt', balanceUrl: 'http://pc-line3/poids/poids.txt', state: 'IDLE', is_active: true, isActive: true },
 ];
 
 // Mock Terminals
@@ -100,9 +100,8 @@ function generateMockItems(count: number, taskId: string, product: Product): Pro
     const variance = (Math.random() - 0.5) * 2 * (targetWeight * tolerance / 100);
     const weight = targetWeight + variance + (Math.random() > 0.9 ? (Math.random() > 0.5 ? 20 : -20) : 0);
     
-    let status: 'ok' | 'underweight' | 'overweight' = 'ok';
-    if (weight < minWeight) status = 'underweight';
-    else if (weight > maxWeight) status = 'overweight';
+    let status: 'conforme' | 'non_conforme' = 'conforme';
+    if (weight < minWeight || weight > maxWeight) status = 'non_conforme';
     
     const capturedAt = new Date(now - (count - i) * 5000).toISOString();
     
@@ -204,8 +203,6 @@ export function getLineStatus(lineId: string): LineStatus {
     code: lineId.substring(0, 8).toUpperCase(),
     scale_url: '',
     balanceUrl: '',
-    photocell_url: '',
-    photocellUrl: '',
     state: 'IDLE',
     is_active: true,
     isActive: true,
@@ -224,10 +221,8 @@ export function getLineStatus(lineId: string): LineStatus {
     balance: defaultBalance,
     terminal,
     currentWeight: simulateWeight(activeTask?.product),
-    photocellState: Math.random() > 0.7 ? 1 : 0,
     activeTask,
     lastItems: activeTask?.items?.slice(-5).reverse() || [],
-    captureState: defaultLine.state === 'RUNNING' ? 'armed' : 'idle',
   };
 }
 

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Play, Pause, CheckCircle, Plus, ArrowLeft, LogOut } from 'lucide-react';
+import { Play, Pause, CheckCircle, XCircle, Plus, ArrowLeft, LogOut, Scale } from 'lucide-react';
 
 interface Line { id: string; name: string; status?: string }
 interface Task {
@@ -41,7 +41,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const [productId, setProductId] = useState<string>('');
   const [targetQty, setTargetQty] = useState<number>(50);
 
-  // Sensor (optional): URLs are managed per terminal in DB; for now leave empty (manual entry still works)
+  // Sensor: balance only (no photocell)
   const sensor = useSensorData({ pollingInterval: 800 });
 
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
@@ -99,19 +99,21 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     }
   };
 
-  const addItem = async () => {
+  // Confirm weighing with manual conformity status chosen by operator
+  const confirmWeighing = async (conformityStatus: 'conforme' | 'non_conforme') => {
     if (!activeTaskId) return;
     const weight = sensor.weight.value || 0;
     if (!weight) {
-      toast({ title: 'Poids invalide', description: 'Aucun poids détecté (ou 0).' , variant: 'destructive' });
+      toast({ title: 'Poids invalide', description: 'Aucun poids détecté (ou 0).', variant: 'destructive' });
       return;
     }
     try {
-      await apiClient.addProductionItem(activeTaskId, weight, sensor.weight.status || 'ok');
+      await apiClient.addProductionItem(activeTaskId, weight, conformityStatus);
       await loadTasks(lineId);
-      toast({ title: 'Ajouté', description: `Poids: ${weight}` });
+      const label = conformityStatus === 'conforme' ? 'Conforme' : 'Non conforme';
+      toast({ title: `${label}`, description: `Poids enregistré: ${weight.toFixed(3)}` });
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || 'Impossible d\'ajouter l\'item', variant: 'destructive' });
+      toast({ title: 'Erreur', description: e?.message || "Impossible d'enregistrer le pesage", variant: 'destructive' });
     }
   };
 
@@ -244,36 +246,68 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
             </CardContent>
           </Card>
 
-          {/* Pesage */}
+          {/* Pesage & Confirmation manuelle */}
           <Card>
             <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-              <CardTitle className="text-base sm:text-lg">Pesage</CardTitle>
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <Scale className="w-5 h-5" />
+                Pesage
+              </CardTitle>
             </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0 space-y-3">
+            <CardContent className="p-3 sm:p-6 pt-0 space-y-4">
+              {/* Weight display */}
               <div className="flex items-center justify-between rounded-lg border p-3 sm:p-4">
                 <div>
-                  <div className="text-xs sm:text-sm text-muted-foreground">Poids</div>
-                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold">{sensor.weight.value.toFixed(3)}</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground">Poids actuel</div>
+                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold font-mono">
+                    {sensor.weight.value.toFixed(3)}
+                  </div>
                 </div>
                 <Badge 
                   variant={sensor.weight.status === 'stable' ? 'default' : sensor.weight.status === 'unstable' ? 'secondary' : 'destructive'}
                   className="text-xs sm:text-sm"
                 >
-                  {sensor.weight.status}
+                  {sensor.weight.status === 'stable' ? 'Stable' : 
+                   sensor.weight.status === 'unstable' ? 'Instable' : 
+                   sensor.weight.status === 'error' ? 'Erreur' : 'Hors ligne'}
                 </Badge>
               </div>
 
-              <Button 
-                onClick={addItem} 
-                disabled={!activeTaskId} 
-                className="w-full h-12 sm:h-14 text-base sm:text-lg"
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                Ajouter item
-              </Button>
+              {/* Target weight info */}
+              {activeTask && activeTask.target_weight && (
+                <div className="text-xs sm:text-sm text-muted-foreground text-center">
+                  Cible: {activeTask.target_weight} (min: {activeTask.tolerance_min} / max: {activeTask.tolerance_max})
+                </div>
+              )}
 
-              <div className="text-xs text-muted-foreground">
-                Astuce: configurez les URLs de la balance/photocellule par terminal (à intégrer si besoin).
+              {/* Manual confirmation buttons */}
+              <div className="space-y-2">
+                <div className="text-xs sm:text-sm font-medium text-center text-muted-foreground">
+                  Confirmez le pesage et l'état du produit
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button 
+                    onClick={() => confirmWeighing('conforme')} 
+                    disabled={!activeTaskId || activeTask?.status !== 'in_progress'}
+                    className="h-14 sm:h-16 text-base sm:text-lg bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
+                    Conforme
+                  </Button>
+                  <Button 
+                    onClick={() => confirmWeighing('non_conforme')} 
+                    disabled={!activeTaskId || activeTask?.status !== 'in_progress'}
+                    variant="destructive"
+                    className="h-14 sm:h-16 text-base sm:text-lg"
+                  >
+                    <XCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
+                    Non conforme
+                  </Button>
+                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground text-center">
+                L'opérateur confirme manuellement le poids lu et l'état de conformité du produit.
               </div>
             </CardContent>
           </Card>

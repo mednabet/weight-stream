@@ -31,14 +31,6 @@ export function WeightDisplay({ weight, product, lineUnit = 'g', decimalPrecisio
     if (weight.status === 'error') return 'text-status-error';
     if (weight.status === 'unstable') return 'text-status-unstable';
     if (weight.status === 'offline') return 'text-status-offline';
-    
-    // If we have a product, check weight validity using converted value
-    if (product && weight.status === 'stable') {
-      if (validationValue < product.minWeight) return 'text-status-error';
-      if (validationValue > product.maxWeight) return 'text-status-error';
-      return 'text-status-stable';
-    }
-    
     return 'text-status-stable';
   };
 
@@ -51,14 +43,8 @@ export function WeightDisplay({ weight, product, lineUnit = 'g', decimalPrecisio
     }
   };
 
-  const getWeightValidity = () => {
-    if (!product || weight.status !== 'stable') return null;
-    if (validationValue < product.minWeight) return 'underweight';
-    if (validationValue > product.maxWeight) return 'overweight';
-    return 'ok';
-  };
-
-  const validity = getWeightValidity();
+  // Validity is now determined manually by the operator
+  const validity = null;
 
   const sizeClasses = {
     sm: 'text-xl',
@@ -110,22 +96,6 @@ export function WeightDisplay({ weight, product, lineUnit = 'g', decimalPrecisio
           <span className="text-xs text-muted-foreground">
             Cible: {product.targetWeight}{productUnit} ({product.minWeight}-{product.maxWeight})
           </span>
-          {showValidity && validity && (
-            <span className={cn(
-              'flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
-              validity === 'ok' ? 'bg-status-stable/15 text-status-stable' :
-              validity === 'underweight' ? 'bg-status-error/15 text-status-error' :
-              'bg-status-unstable/15 text-status-unstable'
-            )}>
-              {validity === 'ok' ? (
-                <><CheckCircle className="w-3 h-3" /> OK</>
-              ) : validity === 'underweight' ? (
-                <><AlertTriangle className="w-3 h-3" /> Sous</>
-              ) : (
-                <><AlertTriangle className="w-3 h-3" /> Sur</>
-              )}
-            </span>
-          )}
         </div>
       )}
     </div>

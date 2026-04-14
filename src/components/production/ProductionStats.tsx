@@ -3,8 +3,8 @@ import { ProductionItem } from '@/types/production';
 import { cn } from '@/lib/utils';
 import { formatWeight } from '@/lib/weight-conversion';
 import { 
-  CheckCircle2, AlertTriangle, TrendingDown, TrendingUp, 
-  Scale, Package, Timer, BarChart3, Percent
+  CheckCircle2, AlertTriangle, XCircle,
+  Scale, Timer, BarChart3, Percent
 } from 'lucide-react';
 
 interface ProductionStatsProps {
@@ -17,12 +17,11 @@ interface ProductionStatsProps {
 
 export function ProductionStats({ items, productUnit = 'g', startedAt, decimalPrecision = 2, className }: ProductionStatsProps) {
   const stats = useMemo(() => {
-    const okItems = items.filter(i => i.status === 'ok');
-    const underweightItems = items.filter(i => i.status === 'underweight');
-    const overweightItems = items.filter(i => i.status === 'overweight');
+    const conformeItems = items.filter(i => i.status === 'conforme');
+    const nonConformeItems = items.filter(i => i.status === 'non_conforme');
     
     const total = items.length;
-    const okRate = total > 0 ? (okItems.length / total) * 100 : 0;
+    const okRate = total > 0 ? (conformeItems.length / total) * 100 : 0;
     const totalWeight = items.reduce((sum, i) => sum + i.weight, 0);
     const avgWeight = total > 0 ? totalWeight / total : 0;
     
@@ -37,9 +36,8 @@ export function ProductionStats({ items, productUnit = 'g', startedAt, decimalPr
     
     return {
       total,
-      ok: okItems.length,
-      underweight: underweightItems.length,
-      overweight: overweightItems.length,
+      conforme: conformeItems.length,
+      nonConforme: nonConformeItems.length,
       okRate,
       totalWeight,
       avgWeight,
@@ -58,13 +56,13 @@ export function ProductionStats({ items, productUnit = 'g', startedAt, decimalPr
 
   return (
     <div className={cn("grid grid-cols-2 gap-3", className)}>
-      {/* OK Count */}
+      {/* Conforme Count */}
       <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-status-ok/10 border border-status-ok/20">
         <div className="w-10 h-10 rounded-lg bg-status-ok/20 flex items-center justify-center">
           <CheckCircle2 className="w-5 h-5 text-status-ok" />
         </div>
         <div>
-          <div className="text-2xl font-bold text-status-ok">{stats.ok}</div>
+          <div className="text-2xl font-bold text-status-ok">{stats.conforme}</div>
           <div className="text-xs text-muted-foreground">Conformes</div>
         </div>
       </div>
@@ -76,29 +74,18 @@ export function ProductionStats({ items, productUnit = 'g', startedAt, decimalPr
         </div>
         <div>
           <div className="text-2xl font-bold text-primary">{stats.okRate.toFixed(1)}%</div>
-          <div className="text-xs text-muted-foreground">Taux OK</div>
+          <div className="text-xs text-muted-foreground">Taux conformité</div>
         </div>
       </div>
       
-      {/* Underweight */}
+      {/* Non Conforme */}
       <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-status-error/10 border border-status-error/20">
         <div className="w-10 h-10 rounded-lg bg-status-error/20 flex items-center justify-center">
-          <TrendingDown className="w-5 h-5 text-status-error" />
+          <XCircle className="w-5 h-5 text-status-error" />
         </div>
         <div>
-          <div className="text-2xl font-bold text-status-error">{stats.underweight}</div>
-          <div className="text-xs text-muted-foreground">Sous-poids</div>
-        </div>
-      </div>
-      
-      {/* Overweight */}
-      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-        <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-          <TrendingUp className="w-5 h-5 text-amber-500" />
-        </div>
-        <div>
-          <div className="text-2xl font-bold text-amber-500">{stats.overweight}</div>
-          <div className="text-xs text-muted-foreground">Sur-poids</div>
+          <div className="text-2xl font-bold text-status-error">{stats.nonConforme}</div>
+          <div className="text-xs text-muted-foreground">Non conformes</div>
         </div>
       </div>
       

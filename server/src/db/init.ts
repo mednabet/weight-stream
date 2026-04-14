@@ -25,11 +25,23 @@ export async function initDatabase() {
     // Create enum type for item status if not exists
     await client.query(`
       DO $$ BEGIN
-        CREATE TYPE item_status AS ENUM ('valid', 'underweight', 'overweight');
+        CREATE TYPE item_status AS ENUM ('conforme', 'non_conforme');
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
     `);
+
+    // Migration: update item_status enum if old values exist
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TYPE item_status ADD VALUE IF NOT EXISTS 'conforme';
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+    `).catch(() => {});
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TYPE item_status ADD VALUE IF NOT EXISTS 'non_conforme';
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+    `).catch(() => {});
 
     // Create tables if not exist
     await client.query(`
@@ -87,13 +99,17 @@ export async function initDatabase() {
         name VARCHAR(100) NOT NULL,
         description TEXT,
         scale_url VARCHAR(255),
-        photocell_url VARCHAR(255),
         weight_unit_id UUID REFERENCES weight_units(id),
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migration: drop photocell_url column if it exists
+    await client.query(`
+      ALTER TABLE production_lines DROP COLUMN IF EXISTS photocell_url
+    `).catch(() => {});
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS terminals (

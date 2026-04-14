@@ -37,7 +37,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
 import { 
   Factory, Plus, Pencil, Trash2, Loader2, RefreshCw, 
-  Scale, Eye, Power, PowerOff, Settings2, Link2
+  Scale, Power, PowerOff, Settings2, Link2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +46,6 @@ interface Line {
   name: string; 
   description?: string;
   scale_url?: string;
-  photocell_url?: string;
   weight_unit_id?: string;
   weight_unit_code?: string;
   weight_unit_symbol?: string;
@@ -58,7 +57,6 @@ interface LineFormData {
   name: string;
   description: string;
   scale_url: string;
-  photocell_url: string;
   weight_unit_id: string;
   is_active: boolean;
 }
@@ -67,7 +65,6 @@ const defaultFormData: LineFormData = {
   name: '',
   description: '',
   scale_url: '',
-  photocell_url: '',
   weight_unit_id: '',
   is_active: true,
 };
@@ -98,7 +95,6 @@ export function LinesManagement() {
       name: line.name || '',
       description: line.description || '',
       scale_url: line.scale_url || '',
-      photocell_url: line.photocell_url || '',
       weight_unit_id: line.weight_unit_id || '',
       is_active: line.is_active !== false,
     });
@@ -259,10 +255,6 @@ export function LinesManagement() {
                     <Scale className="w-3 h-3 sm:w-4 sm:h-4" />
                     <span className="truncate">{line.scale_url ? 'Balance configurée' : 'Pas de balance'}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="truncate">{line.photocell_url ? 'Photocellule configurée' : 'Pas de photocellule'}</span>
-                  </div>
                   {line.weight_unit_symbol && (
                     <div className="flex items-center gap-1.5 text-muted-foreground col-span-2">
                       <Link2 className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -374,20 +366,6 @@ export function LinesManagement() {
                 />
               </div>
               
-              <div className="space-y-1.5">
-                <Label htmlFor="photocell_url" className="text-xs sm:text-sm flex items-center gap-1.5">
-                  <Eye className="w-3 h-3" />
-                  URL de la photocellule
-                </Label>
-                <Input
-                  id="photocell_url"
-                  value={formData.photocell_url}
-                  onChange={e => setFormData(prev => ({ ...prev, photocell_url: e.target.value }))}
-                  placeholder="http://192.168.1.100:8080/photocell"
-                  className="h-9 sm:h-10 text-sm font-mono"
-                />
-              </div>
-
               <div className="space-y-1.5">
                 <Label htmlFor="weight_unit" className="text-xs sm:text-sm">Unité de poids</Label>
                 <Select 

@@ -1,19 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { WeightReading, PhotocellState, WeightStatus } from '@/types/production';
+import { WeightReading, WeightStatus } from '@/types/production';
 
 
 interface SensorConfig {
   scaleUrl?: string | null;
-  photocellUrl?: string | null;
   pollingInterval?: number;
 }
 
 interface UseSensorDataResult {
   weight: WeightReading;
-  photocellState: PhotocellState;
   isScaleConnected: boolean;
-  isPhotocellConnected: boolean;
-  errors: { scale?: string; photocell?: string };
+  errors: { scale?: string };
 }
 
 // Parse weight from text response
@@ -65,24 +62,7 @@ function parseWeight(text: string): { value: number; status: WeightStatus } {
   };
 }
 
-// Parse photocell state from text response
-// Only "0" (no object) or "1" (object detected) are valid
-// Anything else is considered an error
-function parsePhotocell(text: string): { state: PhotocellState; isError: boolean } {
-  const trimmed = text.trim();
-  
-  if (trimmed === '1') {
-    return { state: 1, isError: false };
-  }
-  if (trimmed === '0') {
-    return { state: 0, isError: false };
-  }
-  
-  // Any other value is an error
-  return { state: 0, isError: true };
-}
-
-// Fetch sensor data via edge function (bypasses CORS)
+// Fetch sensor data via direct HTTP request
 async function fetchSensorViaProxy(url: string): Promise<{ data?: string; error?: string }> {
   try {
     const res = await fetch(url, { method: 'GET' });
@@ -98,13 +78,11 @@ async function fetchSensorViaProxy(url: string): Promise<{ data?: string; error?
 }
 
 export function useSensorData(config: SensorConfig): UseSensorDataResult {
-  const { scaleUrl, photocellUrl, pollingInterval = 200 } = config;
+  const { scaleUrl, pollingInterval = 200 } = config;
   
   const [weight, setWeight] = useState<WeightReading>({ value: 0, status: 'offline', timestamp: Date.now() });
-  const [photocellState, setPhotocellState] = useState<PhotocellState>(0);
   const [isScaleConnected, setIsScaleConnected] = useState(false);
-  const [isPhotocellConnected, setIsPhotocellConnected] = useState(false);
-  const [errors, setErrors] = useState<{ scale?: string; photocell?: string }>({});
+  const [errors, setErrors] = useState<{ scale?: string }>({});
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -126,25 +104,7 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
       setWeight({ value: 0, status: 'offline', timestamp: Date.now() });
       setIsScaleConnected(false);
     }
-    
-    // Poll photocell
-    if (photocellUrl) {
-      const result = await fetchSensorViaProxy(photocellUrl);
-      if (result.data) {
-        const parsed = parsePhotocell(result.data);
-        setPhotocellState(parsed.state);
-        setIsPhotocellConnected(!parsed.isError);
-        setErrors(prev => ({ ...prev, photocell: parsed.isError ? 'Invalid response' : undefined }));
-      } else {
-        setPhotocellState(0);
-        setIsPhotocellConnected(false);
-        setErrors(prev => ({ ...prev, photocell: result.error }));
-      }
-    } else {
-      setPhotocellState(0);
-      setIsPhotocellConnected(false);
-    }
-  }, [scaleUrl, photocellUrl]);
+  }, [scaleUrl]);
   
   useEffect(() => {
     // Clear any existing interval
@@ -152,8 +112,8 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
       clearInterval(intervalRef.current);
     }
     
-    // Start polling if we have at least one URL
-    if (scaleUrl || photocellUrl) {
+    // Start polling if we have a scale URL
+    if (scaleUrl) {
       // Initial poll
       pollSensors();
       
@@ -168,13 +128,11 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
         intervalRef.current = null;
       }
     };
-  }, [scaleUrl, photocellUrl, pollingInterval, pollSensors]);
+  }, [scaleUrl, pollingInterval, pollSensors]);
   
   return {
     weight,
-    photocellState,
     isScaleConnected,
-    isPhotocellConnected,
     errors,
   };
 }

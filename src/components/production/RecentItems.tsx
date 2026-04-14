@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ProductionItem, Product } from '@/types/production';
 import { cn } from '@/lib/utils';
 import { formatWeight } from '@/lib/weight-conversion';
-import { CheckCircle, AlertTriangle, ArrowDown, ArrowUp, Clock, Filter } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, Filter } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 type FilterType = 'all' | 'ok' | 'error';
@@ -20,15 +20,15 @@ export function RecentItems({ items, product, maxItems = 10, decimalPrecision = 
 
   const filteredItems = items.filter(item => {
     if (filter === 'all') return true;
-    if (filter === 'ok') return item.status === 'ok';
-    if (filter === 'error') return item.status === 'underweight' || item.status === 'overweight';
+    if (filter === 'ok') return item.status === 'conforme';
+    if (filter === 'error') return item.status === 'non_conforme';
     return true;
   });
 
   const displayItems = filteredItems.slice(0, maxItems);
 
-  const okCount = items.filter(i => i.status === 'ok').length;
-  const errorCount = items.filter(i => i.status !== 'ok').length;
+  const okCount = items.filter(i => i.status === 'conforme').length;
+  const errorCount = items.filter(i => i.status === 'non_conforme').length;
 
   const formatTime = (isoString: string) => {
     const date = new Date(isoString);
@@ -37,23 +37,19 @@ export function RecentItems({ items, product, maxItems = 10, decimalPrecision = 
 
   const getStatusIcon = (status: ProductionItem['status']) => {
     switch (status) {
-      case 'ok':
+      case 'conforme':
         return <CheckCircle className="w-5 h-5 text-status-ok" />;
-      case 'underweight':
-        return <ArrowDown className="w-5 h-5 text-status-error" />;
-      case 'overweight':
-        return <ArrowUp className="w-5 h-5 text-status-warning" />;
+      case 'non_conforme':
+        return <AlertTriangle className="w-5 h-5 text-status-error" />;
     }
   };
 
   const getStatusBg = (status: ProductionItem['status']) => {
     switch (status) {
-      case 'ok':
+      case 'conforme':
         return 'bg-status-ok/10 border-status-ok/20';
-      case 'underweight':
+      case 'non_conforme':
         return 'bg-status-error/10 border-status-error/20';
-      case 'overweight':
-        return 'bg-status-warning/10 border-status-warning/20';
     }
   };
 
@@ -118,7 +114,7 @@ export function RecentItems({ items, product, maxItems = 10, decimalPrecision = 
             <Clock className="w-8 h-8 mb-2 opacity-50" />
             <span className="text-sm">
               {filter === 'all' ? 'Aucune pièce capturée' : 
-               filter === 'ok' ? 'Aucune pièce conforme' : 'Aucune pièce hors tolérance'}
+               filter === 'ok' ? 'Aucune pièce conforme' : 'Aucune pièce non conforme'}
             </span>
           </div>
         ) : (
@@ -138,17 +134,12 @@ export function RecentItems({ items, product, maxItems = 10, decimalPrecision = 
                     <span className="font-mono font-semibold text-lg">
                       {formatWeight(item.weight, unit, decimalPrecision)}{unit}
                     </span>
-                    {item.status !== 'ok' && (
+                    {item.status === 'non_conforme' && (
                       <Badge 
                         variant="outline" 
-                        className={cn(
-                          'ml-2 text-xs',
-                          item.status === 'underweight' 
-                            ? 'border-status-error/50 text-status-error' 
-                            : 'border-status-warning/50 text-status-warning'
-                        )}
+                        className="ml-2 text-xs border-status-error/50 text-status-error"
                       >
-                        {item.status === 'underweight' ? 'Sous' : 'Sur'}
+                        Non conforme
                       </Badge>
                     )}
                   </div>

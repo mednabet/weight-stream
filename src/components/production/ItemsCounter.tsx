@@ -4,7 +4,7 @@ import { Package, TrendingUp } from 'lucide-react';
 interface ItemsCounterProps {
   count: number;
   target?: number;
-  lastItemStatus?: 'ok' | 'underweight' | 'overweight';
+  lastItemStatus?: 'conforme' | 'non_conforme';
   showFlash?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -48,8 +48,8 @@ export function ItemsCounter({
       <div className={cn(
         'font-mono font-bold tracking-tight',
         sizeClasses[size],
-        lastItemStatus === 'ok' ? 'text-status-stable' :
-        lastItemStatus === 'underweight' || lastItemStatus === 'overweight' ? 'text-status-error' :
+        lastItemStatus === 'conforme' ? 'text-status-stable' :
+        lastItemStatus === 'non_conforme' ? 'text-status-error' :
         'text-foreground'
       )} style={{ textShadow: '0 0 30px currentColor' }}>
         {count.toLocaleString()}
