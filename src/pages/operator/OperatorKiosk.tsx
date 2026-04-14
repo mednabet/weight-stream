@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { useProducts } from '@/hooks/useProductionData';
 import { useSensorData } from '@/hooks/useSensorData';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Play, Pause, CheckCircle, XCircle, ArrowLeft, LogOut, Scale, BarChart3, Clock, Maximize, Minimize } from 'lucide-react';
+import { Play, Pause, CheckCircle, XCircle, LogOut, Scale, Maximize, Minimize, Square, PlusCircle } from 'lucide-react';
 
 interface Line { id: string; name: string; status?: string; scale_url?: string | null }
 interface Task {
@@ -49,20 +48,14 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const [targetQty, setTargetQty] = useState<number>(50);
   const [recentItems, setRecentItems] = useState<ProductionItem[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showCreateTask, setShowCreateTask] = useState(false);
 
-  // Get the scale URL from the selected line
   const selectedLine = useMemo(() => lines.find(l => l.id === lineId) || null, [lines, lineId]);
-
-  // Sensor: balance reads from the line's scale_url
   const sensor = useSensorData({ scaleUrl: selectedLine?.scale_url, pollingInterval: 800 });
-
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
-
-  // Determine if the active task is running (in_progress)
   const isTaskRunning = activeTask?.status === 'in_progress';
   const isTaskActive = activeTask && activeTask.status !== 'completed' && activeTask.status !== 'cancelled';
 
-  // Stats from recent items
   const stats = useMemo(() => {
     const conformes = recentItems.filter(i => i.status === 'conforme').length;
     const nonConformes = recentItems.filter(i => i.status === 'non_conforme').length;
@@ -71,41 +64,45 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     return { conformes, nonConformes, total, tauxConformite };
   }, [recentItems]);
 
-  const loadLines = async () => {
+  const loadLines = useCallback(async () => {
     const data = await apiClient.getLines();
     setLines(data as any);
     if (!lineId && (data as any[]).length) setLineId((data as any[])[0].id);
-  };
+  }, [lineId]);
 
-  const loadTasks = async (lId: string) => {
+  const loadTasks = useCallback(async (lId: string) => {
     if (!lId) return;
     const data = await apiClient.getTasksForLine(lId);
     setTasks(data as any);
-    // Auto-select in_progress task, or keep current if still valid
-    const inProgress = (data as any[]).find(t => t.status === 'in_progress');
+    const allTasks = data as any[];
+    // Priorité : in_progress > paused > pending
+    const inProgress = allTasks.find(t => t.status === 'in_progress');
+    const paused = allTasks.find(t => t.status === 'paused');
+    const pending = allTasks.find(t => t.status === 'pending');
     if (inProgress) {
       setActiveTaskId(inProgress.id);
-    } else if (!activeTaskId || !(data as any[]).find(t => t.id === activeTaskId)) {
-      // If no in_progress and current active is gone, select the first pending/paused
-      const pending = (data as any[]).find(t => t.status === 'pending' || t.status === 'paused');
-      if (pending) setActiveTaskId(pending.id);
+    } else if (paused) {
+      setActiveTaskId(paused.id);
+    } else if (pending) {
+      setActiveTaskId(pending.id);
+    } else {
+      // Toutes les tâches sont terminées/annulées
+      setActiveTaskId('');
+      setRecentItems([]);
     }
-  };
+  }, []);
 
-  const loadRecentItems = async (taskId: string) => {
+  const loadRecentItems = useCallback(async (taskId: string) => {
     if (!taskId) { setRecentItems([]); return; }
     try {
       const data = await apiClient.getProductionItems(taskId);
-      setRecentItems((data as any[]).slice(0, 20));
+      setRecentItems((data as any[]).slice(0, 50));
     } catch {
       setRecentItems([]);
     }
-  };
-
-  useEffect(() => {
-    loadLines().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => { loadLines().catch(() => {}); }, []);
 
   useEffect(() => {
     if (!lineId) return;
@@ -117,10 +114,24 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   useEffect(() => {
     if (activeTaskId) {
       loadRecentItems(activeTaskId).catch(() => {});
+      const itemsInterval = setInterval(() => loadRecentItems(activeTaskId).catch(() => {}), 3000);
+      return () => clearInterval(itemsInterval);
     } else {
       setRecentItems([]);
     }
   }, [activeTaskId]);
+
+  // Auto fullscreen on POS
+  useEffect(() => {
+    const enterFullscreen = () => {
+      if (!document.fullscreenElement && !embedded) {
+        document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      }
+    };
+    // Listen for first touch to trigger fullscreen (required by browsers)
+    document.addEventListener('touchstart', enterFullscreen, { once: true });
+    return () => document.removeEventListener('touchstart', enterFullscreen);
+  }, [embedded]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -141,6 +152,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       });
       setActiveTaskId((created as any).id);
       await loadTasks(lineId);
+      setShowCreateTask(false);
       toast({ title: 'Tâche créée', description: 'Vous pouvez démarrer la production.' });
     } catch (e: any) {
       toast({ title: 'Erreur', description: e?.message || 'Impossible de créer la tâche', variant: 'destructive' });
@@ -151,18 +163,17 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     if (!activeTaskId) return;
     try {
       await apiClient.updateTaskStatus(activeTaskId, status);
-      await loadTasks(lineId);
-      if (status === 'completed') {
-        // After completing, clear active task and reload
+      if (status === 'completed' || status === 'cancelled') {
         setActiveTaskId('');
         setRecentItems([]);
+        setShowCreateTask(false);
       }
+      await loadTasks(lineId);
     } catch (e: any) {
       toast({ title: 'Erreur', description: e?.message || 'Impossible de changer le statut', variant: 'destructive' });
     }
   };
 
-  // Confirm weighing with manual conformity status chosen by operator
   const confirmWeighing = async (conformityStatus: 'conforme' | 'non_conforme') => {
     if (!activeTaskId) return;
     const weight = sensor.weight.value || 0;
@@ -175,428 +186,336 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       await loadTasks(lineId);
       await loadRecentItems(activeTaskId);
       const label = conformityStatus === 'conforme' ? 'Conforme' : 'Non conforme';
-      toast({ title: `${label}`, description: `Poids enregistré: ${weight.toFixed(3)}` });
+      toast({ title: label, description: `Poids: ${weight.toFixed(3)}` });
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || "Impossible d'enregistrer le pesage", variant: 'destructive' });
+      toast({ title: 'Erreur', description: e?.message || "Impossible d'enregistrer", variant: 'destructive' });
     }
   };
 
+  // Weight status color helpers
+  const weightColor = sensor.weight.status === 'stable' ? 'text-green-400' :
+    sensor.weight.status === 'unstable' ? 'text-orange-400' :
+    sensor.weight.status === 'error' ? 'text-red-400' : 'text-gray-500';
+
+  const weightBorderColor = sensor.weight.status === 'stable' ? 'border-green-500/60 bg-green-500/5' :
+    sensor.weight.status === 'unstable' ? 'border-orange-500/60 bg-orange-500/5' :
+    sensor.weight.status === 'error' ? 'border-red-500/60 bg-red-500/5' : 'border-border';
+
+  const badgeColor = sensor.weight.status === 'stable' ? 'bg-green-600 text-white' :
+    sensor.weight.status === 'unstable' ? 'bg-orange-500 text-white animate-pulse' :
+    sensor.weight.status === 'error' ? 'bg-red-600 text-white' : 'bg-gray-600 text-white';
+
+  const badgeLabel = sensor.weight.status === 'stable' ? 'Stable' :
+    sensor.weight.status === 'unstable' ? 'Instable' :
+    sensor.weight.status === 'error' ? 'Erreur' : 'Hors ligne';
+
+  const progressPct = activeTask ? Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100) : 0;
+
   return (
-    <div className={embedded ? "p-2 sm:p-4 space-y-3 sm:space-y-4" : "min-h-screen bg-background"}>
-      {/* Header - only when not embedded */}
-      {!embedded && (
-        <header className="sticky top-0 z-50 bg-card/80 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-3 sm:py-4">
-          <div className="flex items-center justify-between max-w-[1920px] mx-auto">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => window.location.href = '/'}
-                className="w-8 h-8 sm:w-10 sm:h-10"
-              >
-                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-              </Button>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold">Kiosk Opérateur</h1>
-                <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">{user?.email || ''}</p>
-              </div>
-            </div>
+    <div className={`${embedded ? '' : 'h-screen'} bg-background flex flex-col overflow-hidden select-none`}>
+      {/* ===== TOP BAR — compact, always visible ===== */}
+      <header className="flex-shrink-0 bg-card border-b border-border px-3 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {/* Line selector — compact */}
+          <Select value={lineId} onValueChange={(v) => { setLineId(v); setActiveTaskId(''); setShowCreateTask(false); }}>
+            <SelectTrigger className="h-9 w-40 text-sm font-medium">
+              <SelectValue placeholder="Ligne" />
+            </SelectTrigger>
+            <SelectContent>
+              {lines.map(l => (
+                <SelectItem key={l.id} value={l.id} className="text-sm">{l.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Task info badge */}
+          {isTaskActive && activeTask && (
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="w-8 h-8 sm:w-10 sm:h-10">
-                {isFullscreen ? <Minimize className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />}
-              </Button>
-              <Button variant="ghost" size="icon" onClick={logout} className="w-8 h-8 sm:w-10 sm:h-10">
-                <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
-              </Button>
+              <span className="text-sm font-medium text-muted-foreground truncate max-w-[200px]">
+                {activeTask.product_name} {activeTask.product_reference ? `(${activeTask.product_reference})` : ''}
+              </span>
+              <Badge className={`text-xs ${
+                activeTask.status === 'in_progress' ? 'bg-green-600 text-white' :
+                activeTask.status === 'paused' ? 'bg-yellow-600 text-white' :
+                'bg-gray-600 text-white'
+              }`}>
+                {activeTask.status === 'in_progress' ? 'En cours' :
+                 activeTask.status === 'paused' ? 'En pause' :
+                 activeTask.status === 'pending' ? 'En attente' : activeTask.status}
+              </Badge>
+              <span className="text-xs text-muted-foreground font-mono">
+                {activeTask.produced_quantity}/{activeTask.target_quantity}
+              </span>
             </div>
-          </div>
-        </header>
-      )}
+          )}
+        </div>
 
-      <div className={embedded ? "" : "p-3 sm:p-6 max-w-[1920px] mx-auto space-y-3 sm:space-y-4"}>
-        {/* Header info when embedded */}
-        {embedded && (
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-lg sm:text-xl font-semibold">Kiosk opérateur</div>
-              <div className="text-xs sm:text-sm text-muted-foreground">{user?.email || ''}</div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground hidden sm:block mr-2">{user?.email}</span>
+          <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="w-8 h-8 touch-manipulation">
+            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={logout} className="w-8 h-8 touch-manipulation">
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
+      </header>
+
+      {/* ===== MAIN CONTENT — fills remaining height, no scroll ===== */}
+      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
+
+        {/* === ROW 1: Weight + Action Buttons (PRIMARY ZONE — largest area) === */}
+        <div className="flex-1 flex gap-2 min-h-0">
+
+          {/* LEFT: Weight Display — hero zone */}
+          <div className={`flex-1 rounded-xl border-2 p-4 flex flex-col items-center justify-center transition-all duration-300 ${weightBorderColor}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Scale className={`w-5 h-5 ${weightColor}`} />
+              <span className="text-sm text-muted-foreground">Poids actuel</span>
+              <Badge className={`${badgeColor} text-xs`}>{badgeLabel}</Badge>
             </div>
-          </div>
-        )}
 
-        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-          {/* ===== COLONNE GAUCHE : Choix ligne / tâche ===== */}
-          <Card>
-            <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-              <CardTitle className="text-base sm:text-lg">Choix ligne / tâche</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0 space-y-3">
-              {/* Sélection ligne */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <div className="text-xs sm:text-sm font-medium">Ligne</div>
-                  <Select value={lineId} onValueChange={(v) => { setLineId(v); setActiveTaskId(''); }}>
-                    <SelectTrigger className="h-10 sm:h-11">
-                      <SelectValue placeholder="Choisir une ligne" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {lines.map(l => (
-                        <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            {/* GIANT weight display — readable from 1-2 meters */}
+            <div className={`text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold font-mono leading-none tracking-tight transition-colors duration-300 ${weightColor} ${sensor.weight.status === 'unstable' ? 'animate-pulse' : ''}`}>
+              {sensor.weight.value.toFixed(3)}
+            </div>
 
-                {/* Sélection produit - visible uniquement si pas de tâche active */}
-                {!isTaskActive && (
-                  <div className="space-y-1.5">
-                    <div className="text-xs sm:text-sm font-medium">Produit</div>
-                    <Select value={productId} onValueChange={setProductId}>
-                      <SelectTrigger className="h-10 sm:h-11">
-                        <SelectValue placeholder="Choisir un produit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} {p.reference ? `(${p.reference})` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+            {/* Target info */}
+            {activeTask?.target_weight && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                Cible: <span className="font-mono font-medium text-foreground">{activeTask.target_weight}</span>
+                <span className="mx-1">|</span>
+                Min: <span className="font-mono">{activeTask.tolerance_min}</span>
+                <span className="mx-1">—</span>
+                Max: <span className="font-mono">{activeTask.tolerance_max}</span>
               </div>
+            )}
 
-              {/* Création de tâche - visible uniquement si pas de tâche active */}
-              {!isTaskActive && (
-                <div className="grid gap-3 sm:grid-cols-2 items-end">
-                  <div className="space-y-1.5">
-                    <div className="text-xs sm:text-sm font-medium">Quantité cible</div>
-                    <Input 
-                      type="number" 
-                      value={targetQty} 
-                      onChange={(e)=>setTargetQty(parseInt(e.target.value||'0',10))} 
-                      className="h-10 sm:h-11"
+            {/* Unstable warning */}
+            {sensor.weight.status === 'unstable' && (
+              <div className="mt-2 text-sm text-orange-400 font-medium animate-pulse">
+                Stabilisation en cours...
+              </div>
+            )}
+
+            {/* Progress bar — thin, under the weight */}
+            {isTaskActive && activeTask && (
+              <div className="w-full max-w-md mt-3">
+                <div className="w-full bg-gray-700/50 rounded-full h-2.5">
+                  <div
+                    className="bg-green-500 h-2.5 rounded-full transition-all duration-500"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>{activeTask.produced_quantity} pesé(s)</span>
+                  <span>{activeTask.target_quantity} cible</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT: Action buttons — large touch targets */}
+          <div className="w-48 sm:w-56 md:w-64 flex flex-col gap-2">
+            {/* Task control buttons */}
+            {isTaskActive && activeTask && (
+              <div className="flex flex-col gap-1.5">
+                {activeTask.status !== 'in_progress' ? (
+                  <Button
+                    onClick={() => setStatus('in_progress')}
+                    className="h-14 text-base font-semibold bg-green-600 hover:bg-green-700 text-white touch-manipulation"
+                  >
+                    <Play className="w-5 h-5 mr-2" />
+                    Démarrer
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => setStatus('paused')}
+                    className="h-12 text-sm font-medium bg-yellow-600 hover:bg-yellow-700 text-white touch-manipulation"
+                  >
+                    <Pause className="w-4 h-4 mr-2" />
+                    Pause
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setStatus('completed')}
+                  variant="outline"
+                  className="h-10 text-sm border-blue-600/50 text-blue-400 hover:bg-blue-600/20 touch-manipulation"
+                >
+                  <Square className="w-4 h-4 mr-2" />
+                  Terminer
+                </Button>
+              </div>
+            )}
+
+            {/* CONFORME / NON CONFORME — the main action */}
+            {isTaskRunning ? (
+              <>
+                <Button
+                  onClick={() => confirmWeighing('conforme')}
+                  disabled={sensor.weight.status !== 'stable'}
+                  className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-green-600 hover:bg-green-500 active:bg-green-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
+                >
+                  <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
+                  Conforme
+                </Button>
+                <Button
+                  onClick={() => confirmWeighing('non_conforme')}
+                  disabled={sensor.weight.status !== 'stable'}
+                  className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-red-600 hover:bg-red-500 active:bg-red-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
+                >
+                  <XCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
+                  Non conforme
+                </Button>
+              </>
+            ) : !isTaskActive ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3">
+                <div className="text-sm text-muted-foreground text-center">Aucune tâche active</div>
+                <Button
+                  onClick={() => setShowCreateTask(!showCreateTask)}
+                  variant="outline"
+                  className="h-14 w-full text-base touch-manipulation"
+                >
+                  <PlusCircle className="w-5 h-5 mr-2" />
+                  Nouvelle tâche
+                </Button>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-sm text-muted-foreground text-center px-2">
+                  {activeTask?.status === 'paused'
+                    ? 'Tâche en pause. Appuyez sur Démarrer.'
+                    : 'Démarrez la tâche pour peser.'}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* === ROW 2: Stats + Recent items (SECONDARY ZONE — compact) === */}
+        <div className="flex-shrink-0 flex gap-2 h-36 sm:h-40">
+          {/* Stats compact */}
+          <div className="w-48 sm:w-56 md:w-64 rounded-xl border border-border bg-card p-3 flex flex-col justify-center">
+            {stats.total > 0 ? (
+              <>
+                <div className="grid grid-cols-3 gap-1.5 text-center mb-2">
+                  <div className="rounded-lg bg-green-600/10 py-1.5">
+                    <div className="text-xl sm:text-2xl font-bold text-green-400">{stats.conformes}</div>
+                    <div className="text-[10px] text-green-400/70">Conformes</div>
+                  </div>
+                  <div className="rounded-lg bg-red-600/10 py-1.5">
+                    <div className="text-xl sm:text-2xl font-bold text-red-400">{stats.nonConformes}</div>
+                    <div className="text-[10px] text-red-400/70">Non conf.</div>
+                  </div>
+                  <div className="rounded-lg bg-blue-600/10 py-1.5">
+                    <div className="text-xl sm:text-2xl font-bold text-blue-400">{stats.total}</div>
+                    <div className="text-[10px] text-blue-400/70">Total</div>
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Conformité</span>
+                    <span className={stats.tauxConformite >= 90 ? 'text-green-400' : stats.tauxConformite >= 70 ? 'text-yellow-400' : 'text-red-400'}>
+                      {stats.tauxConformite}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all duration-500 ${
+                        stats.tauxConformite >= 90 ? 'bg-green-500' : stats.tauxConformite >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${stats.tauxConformite}%` }}
                     />
                   </div>
-                  <Button 
-                    onClick={createTask} 
-                    disabled={!lineId || !productId}
-                    className="h-10 sm:h-11"
-                  >
-                    Créer une tâche
-                  </Button>
                 </div>
-              )}
-
-              {/* Tâche active */}
-              <div className="pt-2 border-t space-y-2">
-                <div className="text-xs sm:text-sm font-medium">Tâche active</div>
-                {isTaskActive && activeTask ? (
-                  <div className="rounded-lg border p-2 sm:p-3 space-y-2">
-                    <div className="font-medium text-sm sm:text-base truncate">
-                      {activeTask.product_name || ''} {activeTask.product_reference ? `(${activeTask.product_reference})` : ''}
-                    </div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">
-                      Produit: {activeTask.produced_quantity}/{activeTask.target_quantity}
-                    </div>
-                    {/* Progress bar */}
-                    <div className="w-full bg-gray-700 rounded-full h-2">
-                      <div 
-                        className="bg-green-500 h-2 rounded-full transition-all duration-500" 
-                        style={{ width: `${Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100)}%` }}
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-2 items-center">
-                      <Badge 
-                        variant="secondary" 
-                        className={`text-xs ${
-                          activeTask.status === 'in_progress' ? 'bg-green-600/20 text-green-400 border-green-600/30' :
-                          activeTask.status === 'paused' ? 'bg-yellow-600/20 text-yellow-400 border-yellow-600/30' :
-                          'bg-gray-600/20 text-gray-400'
-                        }`}
-                      >
-                        {activeTask.status === 'in_progress' ? 'En cours' : 
-                         activeTask.status === 'paused' ? 'En pause' : 
-                         activeTask.status === 'pending' ? 'En attente' : activeTask.status}
-                      </Badge>
-                      <div className="flex gap-1 sm:gap-2">
-                        {activeTask.status !== 'in_progress' && (
-                          <Button size="sm" variant="outline" onClick={()=>setStatus('in_progress')} className="h-8 px-2 sm:px-3 border-green-600/50 text-green-400 hover:bg-green-600/20">
-                            <Play className="w-3 h-3 sm:mr-1" />
-                            <span className="hidden sm:inline">Démarrer</span>
-                          </Button>
-                        )}
-                        {activeTask.status === 'in_progress' && (
-                          <Button size="sm" variant="outline" onClick={()=>setStatus('paused')} className="h-8 px-2 sm:px-3 border-yellow-600/50 text-yellow-400 hover:bg-yellow-600/20">
-                            <Pause className="w-3 h-3 sm:mr-1" />
-                            <span className="hidden sm:inline">Pause</span>
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline" onClick={()=>setStatus('completed')} className="h-8 px-2 sm:px-3 border-blue-600/50 text-blue-400 hover:bg-blue-600/20">
-                          <CheckCircle className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Terminer</span>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-xs sm:text-sm text-muted-foreground">Aucune tâche active. Créez ou sélectionnez une tâche ci-dessous.</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ===== COLONNE DROITE : Pesage & Confirmation manuelle ===== */}
-          <Card>
-            <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <Scale className="w-5 h-5" />
-                Pesage
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0 space-y-4">
-              {/* Weight display */}
-              <div className={`flex items-center justify-between rounded-lg border p-3 sm:p-4 transition-all duration-300 ${
-                sensor.weight.status === 'stable' ? 'border-green-500/50 bg-green-500/5' :
-                sensor.weight.status === 'unstable' ? 'border-orange-500/50 bg-orange-500/5' :
-                sensor.weight.status === 'error' ? 'border-red-500/50 bg-red-500/5' :
-                'border-border'
-              }`}>
-                <div>
-                  <div className="text-xs sm:text-sm text-muted-foreground">Poids actuel</div>
-                  <div className={`text-2xl sm:text-3xl md:text-4xl font-bold font-mono transition-colors duration-300 ${
-                    sensor.weight.status === 'stable' ? 'text-green-400' :
-                    sensor.weight.status === 'unstable' ? 'text-orange-400 animate-pulse' :
-                    sensor.weight.status === 'error' ? 'text-red-400' :
-                    'text-muted-foreground'
-                  }`}>
-                    {sensor.weight.value.toFixed(3)}
-                  </div>
-                </div>
-                <Badge 
-                  className={`text-xs sm:text-sm font-medium ${
-                    sensor.weight.status === 'stable' ? 'bg-green-600 hover:bg-green-700 text-white' :
-                    sensor.weight.status === 'unstable' ? 'bg-orange-500 hover:bg-orange-600 text-white animate-pulse' :
-                    sensor.weight.status === 'error' ? 'bg-red-600 hover:bg-red-700 text-white' :
-                    'bg-gray-600 hover:bg-gray-700 text-white'
-                  }`}
-                >
-                  {sensor.weight.status === 'stable' ? 'Stable' : 
-                   sensor.weight.status === 'unstable' ? 'Instable' : 
-                   sensor.weight.status === 'error' ? 'Erreur' : 'Hors ligne'}
-                </Badge>
-              </div>
-
-              {/* Warning message when unstable */}
-              {sensor.weight.status === 'unstable' && (
-                <div className="text-xs sm:text-sm text-orange-400 text-center font-medium animate-pulse">
-                  Balance instable — veuillez attendre la stabilisation avant de confirmer.
-                </div>
-              )}
-
-              {/* Target weight info */}
-              {activeTask && activeTask.target_weight && (
-                <div className="text-xs sm:text-sm text-muted-foreground text-center">
-                  Cible: {activeTask.target_weight} (min: {activeTask.tolerance_min} / max: {activeTask.tolerance_max})
-                </div>
-              )}
-
-              {/* Manual confirmation buttons - only when task is in_progress */}
-              {isTaskRunning ? (
-                <div className="space-y-2">
-                  <div className="text-xs sm:text-sm font-medium text-center text-muted-foreground">
-                    Confirmez le pesage et l'état du produit
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Button 
-                      onClick={() => confirmWeighing('conforme')} 
-                      disabled={sensor.weight.status !== 'stable'}
-                      className="h-14 sm:h-16 text-base sm:text-lg bg-green-600 hover:bg-green-700 text-white disabled:opacity-40"
-                    >
-                      <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
-                      Conforme
-                    </Button>
-                    <Button 
-                      onClick={() => confirmWeighing('non_conforme')} 
-                      disabled={sensor.weight.status !== 'stable'}
-                      variant="destructive"
-                      className="h-14 sm:h-16 text-base sm:text-lg disabled:opacity-40"
-                    >
-                      <XCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
-                      Non conforme
-                    </Button>
-                  </div>
-                  <div className="text-xs text-muted-foreground text-center">
-                    {sensor.weight.status === 'stable' 
-                      ? "L'opérateur confirme manuellement le poids lu et l'état de conformité du produit."
-                      : sensor.weight.status === 'unstable'
-                        ? 'Les boutons sont désactivés tant que la balance est instable.'
-                        : 'Connectez une balance pour activer le pesage.'
-                    }
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <div className="text-sm text-muted-foreground">
-                    {!isTaskActive 
-                      ? "Sélectionnez ou créez une tâche pour commencer le pesage."
-                      : activeTask?.status === 'paused' 
-                        ? "La tâche est en pause. Cliquez sur Démarrer pour reprendre le pesage."
-                        : "Démarrez la tâche pour activer le pesage."
-                    }
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ===== SECTION STATISTIQUES + HISTORIQUE ===== */}
-        <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-          {/* Statistiques */}
-          <Card>
-            <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Statistiques
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0">
-              {stats.total > 0 ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-2">
-                      <div className="text-lg sm:text-xl font-bold text-green-400">{stats.conformes}</div>
-                      <div className="text-xs text-green-400/70">Conformes</div>
-                    </div>
-                    <div className="rounded-lg bg-red-600/10 border border-red-600/20 p-2">
-                      <div className="text-lg sm:text-xl font-bold text-red-400">{stats.nonConformes}</div>
-                      <div className="text-xs text-red-400/70">Non conf.</div>
-                    </div>
-                    <div className="rounded-lg bg-blue-600/10 border border-blue-600/20 p-2">
-                      <div className="text-lg sm:text-xl font-bold text-blue-400">{stats.total}</div>
-                      <div className="text-xs text-blue-400/70">Total</div>
-                    </div>
-                  </div>
-                  {/* Taux de conformité */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Taux de conformité</span>
-                      <span className={stats.tauxConformite >= 90 ? 'text-green-400' : stats.tauxConformite >= 70 ? 'text-yellow-400' : 'text-red-400'}>
-                        {stats.tauxConformite}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-500 ${
-                          stats.tauxConformite >= 90 ? 'bg-green-500' : stats.tauxConformite >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                        }`}
-                        style={{ width: `${stats.tauxConformite}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-xs sm:text-sm text-muted-foreground text-center py-4">
-                  Aucune donnée de pesage pour cette tâche.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Historique des derniers pesages */}
-          <Card className="lg:col-span-2">
-            <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Derniers pesages
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0">
-              {recentItems.length > 0 ? (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {recentItems.map((item, idx) => (
-                    <div key={item.id} className={`flex items-center justify-between rounded-md border p-2 text-sm ${
-                      item.status === 'conforme' ? 'border-green-600/20 bg-green-600/5' : 'border-red-600/20 bg-red-600/5'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-6">#{recentItems.length - idx}</span>
-                        <span className="font-mono font-medium">{Number(item.weight).toFixed(3)}</span>
-                      </div>
-                      <Badge 
-                        variant="outline" 
-                        className={`text-xs ${
-                          item.status === 'conforme' ? 'border-green-600/50 text-green-400' : 'border-red-600/50 text-red-400'
-                        }`}
-                      >
-                        {item.status === 'conforme' ? 'Conforme' : 'Non conforme'}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs sm:text-sm text-muted-foreground text-center py-4">
-                  Aucun pesage enregistré pour cette tâche.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Dernières tâches */}
-        <Card>
-          <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg">Dernières tâches</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6 pt-0">
-            {tasks.length === 0 ? (
-              <div className="text-xs sm:text-sm text-muted-foreground">Aucune tâche pour cette ligne.</div>
+              </>
             ) : (
-              <div className="space-y-2">
-                {tasks.slice(0, 10).map(t => (
-                  <div key={t.id} className={`flex items-center justify-between rounded-lg border p-2 sm:p-3 gap-2 ${
-                    t.id === activeTaskId ? 'border-blue-500/50 bg-blue-500/5' : ''
+              <div className="text-xs text-muted-foreground text-center">Aucun pesage</div>
+            )}
+          </div>
+
+          {/* Recent items — scrollable horizontal list */}
+          <div className="flex-1 rounded-xl border border-border bg-card p-2 overflow-hidden">
+            <div className="text-xs text-muted-foreground mb-1.5 px-1 font-medium">Derniers pesages</div>
+            {recentItems.length > 0 ? (
+              <div className="flex flex-col gap-1 overflow-y-auto h-[calc(100%-24px)] pr-1">
+                {recentItems.slice(0, 15).map((item, idx) => (
+                  <div key={item.id} className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs ${
+                    item.status === 'conforme' ? 'border-green-600/20 bg-green-600/5' : 'border-red-600/20 bg-red-600/5'
                   }`}>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm sm:text-base truncate">
-                        {t.product_name || ''} {t.product_reference ? `(${t.product_reference})` : ''}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{t.produced_quantity}/{t.target_quantity}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground w-5">#{recentItems.length - idx}</span>
+                      <span className="font-mono font-medium text-sm">{Number(item.weight).toFixed(3)}</span>
                     </div>
-                    <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                      <Badge 
-                        variant="outline" 
-                        className={`text-xs ${
-                          t.status === 'in_progress' ? 'border-green-600/50 text-green-400' :
-                          t.status === 'paused' ? 'border-yellow-600/50 text-yellow-400' :
-                          t.status === 'completed' ? 'border-blue-600/50 text-blue-400' :
-                          t.status === 'pending' ? 'border-gray-600/50 text-gray-400' :
-                          ''
-                        }`}
-                      >
-                        {t.status === 'in_progress' ? 'En cours' :
-                         t.status === 'paused' ? 'En pause' :
-                         t.status === 'completed' ? 'Terminée' :
-                         t.status === 'pending' ? 'En attente' :
-                         t.status}
-                      </Badge>
-                      {t.id !== activeTaskId && t.status !== 'completed' && t.status !== 'cancelled' && (
-                        <Button size="sm" variant="outline" onClick={()=>setActiveTaskId(t.id)} className="h-8 text-xs sm:text-sm">
-                          Activer
-                        </Button>
-                      )}
-                      {t.id === activeTaskId && (
-                        <Badge className="bg-blue-600 text-white text-xs">Active</Badge>
-                      )}
-                    </div>
+                    <span className={`text-[10px] font-medium ${
+                      item.status === 'conforme' ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {item.status === 'conforme' ? 'OK' : 'NOK'}
+                    </span>
                   </div>
                 ))}
               </div>
+            ) : (
+              <div className="text-xs text-muted-foreground text-center py-4">Aucun pesage</div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
+
+      {/* ===== CREATE TASK MODAL — overlay when no task active ===== */}
+      {showCreateTask && !isTaskActive && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowCreateTask(false)}>
+          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-center">Nouvelle tâche</h2>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Produit</label>
+                <Select value={productId} onValueChange={setProductId}>
+                  <SelectTrigger className="h-12 text-base touch-manipulation">
+                    <SelectValue placeholder="Choisir un produit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => (
+                      <SelectItem key={p.id} value={p.id} className="text-base py-3 touch-manipulation">
+                        {p.name} {p.reference ? `(${p.reference})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Quantité cible</label>
+                <Input
+                  type="number"
+                  value={targetQty}
+                  onChange={(e) => setTargetQty(parseInt(e.target.value || '0', 10))}
+                  className="h-12 text-lg text-center font-mono touch-manipulation"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowCreateTask(false)}
+                className="flex-1 h-14 text-base touch-manipulation"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={createTask}
+                disabled={!lineId || !productId}
+                className="flex-1 h-14 text-base bg-green-600 hover:bg-green-700 text-white touch-manipulation"
+              >
+                Créer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
