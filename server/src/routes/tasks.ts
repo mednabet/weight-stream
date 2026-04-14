@@ -46,7 +46,7 @@ tasksRouter.get('/line/:lineId', async (req: AuthRequest, res: Response) => {
 });
 
 // Create task
-tasksRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthRequest, res: Response) => {
+tasksRouter.post('/', requireRole('admin', 'supervisor', 'operator'), async (req: AuthRequest, res: Response) => {
   const { line_id, product_id, target_quantity, operator_id } = req.body;
 
   if (!line_id || !product_id || !target_quantity) {

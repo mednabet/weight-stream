@@ -230,6 +230,10 @@ class ApiClient {
     return this.request<any[]>(`/tasks/${taskId}/items`);
   }
 
+  async getProductionItems(taskId: string) {
+    return this.request<any[]>(`/tasks/${taskId}/items`);
+  }
+
   async deleteTask(id: string) {
     return this.request(`/tasks/${id}`, { method: 'DELETE' });
   }
