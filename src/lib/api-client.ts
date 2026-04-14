@@ -324,6 +324,30 @@ class ApiClient {
   async deleteUser(id: string) {
     return this.request(`/users/${id}`, { method: 'DELETE' });
   }
+
+  // Pallets
+  async getPalletsForTask(taskId: string) {
+    return this.request<any[]>(`/pallets/task/${taskId}`);
+  }
+
+  async getPalletSummary(taskId: string) {
+    return this.request<any>(`/pallets/task/${taskId}/summary`);
+  }
+
+  async addPallet(data: { task_id: string; units_count: number; weight: number; status: string; notes?: string }) {
+    return this.request('/pallets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePallet(id: string) {
+    return this.request(`/pallets/${id}`, { method: 'DELETE' });
+  }
+
+  async getPalletTicket(id: string) {
+    return this.request<any>(`/pallets/${id}/ticket`);
+  }
 }
 
 export const apiClient = new ApiClient();

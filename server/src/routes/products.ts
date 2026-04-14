@@ -24,7 +24,7 @@ productsRouter.get('/', async (_: AuthRequest, res: Response) => {
 
 // Create product
 productsRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthRequest, res: Response) => {
-  const { reference, name, target_weight, tolerance_min, tolerance_max, weight_unit_id } = req.body;
+  const { reference, name, target_weight, tolerance_min, tolerance_max, units_per_pallet, pallet_target_weight, pallet_tolerance_min, pallet_tolerance_max, weight_unit_id } = req.body;
 
   if (!reference || !name || target_weight === undefined) {
     return res.status(400).json({ error: 'Données manquantes' });
@@ -33,12 +33,12 @@ productsRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReq
   try {
     const id = uuidv4();
     await query(
-      `INSERT INTO products (id, reference, name, target_weight, tolerance_min, tolerance_max, weight_unit_id) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, reference, name, target_weight, tolerance_min || 0, tolerance_max || 0, weight_unit_id || null]
+      `INSERT INTO products (id, reference, name, target_weight, tolerance_min, tolerance_max, units_per_pallet, pallet_target_weight, pallet_tolerance_min, pallet_tolerance_max, weight_unit_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, reference, name, target_weight, tolerance_min || 0, tolerance_max || 0, units_per_pallet || 1, pallet_target_weight || null, pallet_tolerance_min || null, pallet_tolerance_max || null, weight_unit_id || null]
     );
 
-    res.json({ id, reference, name, target_weight, tolerance_min, tolerance_max, weight_unit_id });
+    res.json({ id, reference, name, target_weight, tolerance_min, tolerance_max, units_per_pallet, pallet_target_weight, pallet_tolerance_min, pallet_tolerance_max, weight_unit_id });
   } catch (err: any) {
     if (err.code === 'ER_DUP_ENTRY') { // MySQL unique violation
       return res.status(400).json({ error: 'Référence déjà utilisée' });
@@ -51,13 +51,13 @@ productsRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReq
 // Update product
 productsRouter.put('/:id', requireRole('admin', 'supervisor'), async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const { reference, name, target_weight, tolerance_min, tolerance_max, weight_unit_id, is_active } = req.body;
+  const { reference, name, target_weight, tolerance_min, tolerance_max, units_per_pallet, pallet_target_weight, pallet_tolerance_min, pallet_tolerance_max, weight_unit_id, is_active } = req.body;
 
   try {
     await query(
       `UPDATE products SET reference = ?, name = ?, target_weight = ?, tolerance_min = ?, 
-       tolerance_max = ?, weight_unit_id = ?, is_active = ? WHERE id = ?`,
-      [reference, name, target_weight, tolerance_min || 0, tolerance_max || 0, weight_unit_id || null, is_active ?? true, id]
+       tolerance_max = ?, units_per_pallet = ?, pallet_target_weight = ?, pallet_tolerance_min = ?, pallet_tolerance_max = ?, weight_unit_id = ?, is_active = ? WHERE id = ?`,
+      [reference, name, target_weight, tolerance_min || 0, tolerance_max || 0, units_per_pallet || 1, pallet_target_weight || null, pallet_tolerance_min || null, pallet_tolerance_max || null, weight_unit_id || null, is_active ?? true, id]
     );
     res.json({ success: true });
   } catch (err) {

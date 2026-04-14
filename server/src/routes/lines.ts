@@ -24,7 +24,7 @@ linesRouter.get('/', async (_: AuthRequest, res: Response) => {
 
 // Create line
 linesRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthRequest, res: Response) => {
-  const { name, description, scale_url, weight_unit_id } = req.body;
+  const { name, description, scale_url, pallet_scale_url, weight_unit_id } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Nom requis' });
@@ -33,12 +33,12 @@ linesRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
   try {
     const id = uuidv4();
     await query(
-      `INSERT INTO production_lines (id, name, description, scale_url, weight_unit_id) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, name, description || null, scale_url || null, weight_unit_id || null]
+      `INSERT INTO production_lines (id, name, description, scale_url, pallet_scale_url, weight_unit_id) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, name, description || null, scale_url || null, pallet_scale_url || null, weight_unit_id || null]
     );
 
-    res.json({ id, name, description, scale_url, weight_unit_id });
+    res.json({ id, name, description, scale_url, pallet_scale_url, weight_unit_id });
   } catch (err) {
     console.error('Create line error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -48,13 +48,13 @@ linesRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
 // Update line
 linesRouter.put('/:id', requireRole('admin', 'supervisor'), async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const { name, description, scale_url, weight_unit_id, is_active } = req.body;
+  const { name, description, scale_url, pallet_scale_url, weight_unit_id, is_active } = req.body;
 
   try {
     await query(
       `UPDATE production_lines SET name = ?, description = ?, scale_url = ?, 
-       weight_unit_id = ?, is_active = ? WHERE id = ?`,
-      [name, description || null, scale_url || null, weight_unit_id || null, is_active ?? true, id]
+       pallet_scale_url = ?, weight_unit_id = ?, is_active = ? WHERE id = ?`,
+      [name, description || null, scale_url || null, pallet_scale_url || null, weight_unit_id || null, is_active ?? true, id]
     );
     res.json({ success: true });
   } catch (err) {

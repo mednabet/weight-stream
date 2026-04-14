@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Play, Pause, CheckCircle, XCircle, LogOut, Scale, Maximize, Minimize, Square, PlusCircle } from 'lucide-react';
+import { Play, Pause, CheckCircle, XCircle, LogOut, Scale, Maximize, Minimize, Square, PlusCircle, Package } from 'lucide-react';
+import { PalletKiosk } from './PalletKiosk';
 
-interface Line { id: string; name: string; status?: string; scale_url?: string | null }
+interface Line { id: string; name: string; status?: string; scale_url?: string | null; pallet_scale_url?: string | null }
 interface Task {
   id: string;
   line_id: string;
@@ -49,6 +50,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const [recentItems, setRecentItems] = useState<ProductionItem[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [mode, setMode] = useState<'unit' | 'pallet'>('unit');
 
   const selectedLine = useMemo(() => lines.find(l => l.id === lineId) || null, [lines, lineId]);
   const sensor = useSensorData({ scaleUrl: selectedLine?.scale_url, pollingInterval: 800 });
@@ -75,7 +77,6 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     const data = await apiClient.getTasksForLine(lId);
     setTasks(data as any);
     const allTasks = data as any[];
-    // Priorité : in_progress > paused > pending
     const inProgress = allTasks.find(t => t.status === 'in_progress');
     const paused = allTasks.find(t => t.status === 'paused');
     const pending = allTasks.find(t => t.status === 'pending');
@@ -86,7 +87,6 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     } else if (pending) {
       setActiveTaskId(pending.id);
     } else {
-      // Toutes les tâches sont terminées/annulées
       setActiveTaskId('');
       setRecentItems([]);
     }
@@ -121,14 +121,12 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     }
   }, [activeTaskId]);
 
-  // Auto fullscreen on POS
   useEffect(() => {
     const enterFullscreen = () => {
       if (!document.fullscreenElement && !embedded) {
         document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
       }
     };
-    // Listen for first touch to trigger fullscreen (required by browsers)
     document.addEventListener('touchstart', enterFullscreen, { once: true });
     return () => document.removeEventListener('touchstart', enterFullscreen);
   }, [embedded]);
@@ -192,7 +190,6 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     }
   };
 
-  // Weight status color helpers
   const weightColor = sensor.weight.status === 'stable' ? 'text-green-400' :
     sensor.weight.status === 'unstable' ? 'text-orange-400' :
     sensor.weight.status === 'error' ? 'text-red-400' : 'text-gray-500';
@@ -213,10 +210,9 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
 
   return (
     <div className={`${embedded ? '' : 'h-screen'} bg-background flex flex-col overflow-hidden select-none`}>
-      {/* ===== TOP BAR — compact, always visible ===== */}
+      {/* ===== TOP BAR ===== */}
       <header className="flex-shrink-0 bg-card border-b border-border px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Line selector — compact */}
           <Select value={lineId} onValueChange={(v) => { setLineId(v); setActiveTaskId(''); setShowCreateTask(false); }}>
             <SelectTrigger className="h-9 w-40 text-sm font-medium">
               <SelectValue placeholder="Ligne" />
@@ -228,8 +224,30 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
             </SelectContent>
           </Select>
 
-          {/* Task info badge */}
-          {isTaskActive && activeTask && (
+          {/* Mode toggle: Unit / Pallet */}
+          <div className="flex items-center bg-muted rounded-lg p-0.5">
+            <Button
+              variant={mode === 'unit' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setMode('unit')}
+              className={`h-8 px-3 text-xs font-medium touch-manipulation ${mode === 'unit' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
+            >
+              <Scale className="w-3.5 h-3.5 mr-1" />
+              Pesage
+            </Button>
+            <Button
+              variant={mode === 'pallet' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setMode('pallet')}
+              className={`h-8 px-3 text-xs font-medium touch-manipulation ${mode === 'pallet' ? 'bg-purple-600 hover:bg-purple-700 text-white' : ''}`}
+            >
+              <Package className="w-3.5 h-3.5 mr-1" />
+              Palettes
+            </Button>
+          </div>
+
+          {/* Task info badge (unit mode only) */}
+          {mode === 'unit' && isTaskActive && activeTask && (
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-muted-foreground truncate max-w-[200px]">
                 {activeTask.product_name} {activeTask.product_reference ? `(${activeTask.product_reference})` : ''}
@@ -251,7 +269,6 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
         </div>
 
         <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground hidden sm:block mr-2">{user?.email}</span>
           <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="w-8 h-8 touch-manipulation">
             {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
           </Button>
@@ -261,209 +278,209 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
         </div>
       </header>
 
-      {/* ===== MAIN CONTENT — fills remaining height, no scroll ===== */}
-      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
+      {/* ===== MAIN CONTENT ===== */}
+      {mode === 'pallet' ? (
+        <PalletKiosk
+          lineId={lineId}
+          lines={lines}
+          onSwitchToUnit={() => setMode('unit')}
+        />
+      ) : (
+        <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
 
-        {/* === ROW 1: Weight + Action Buttons (PRIMARY ZONE — largest area) === */}
-        <div className="flex-1 flex gap-2 min-h-0">
+          {/* === ROW 1: Weight + Action Buttons === */}
+          <div className="flex-1 flex gap-2 min-h-0">
 
-          {/* LEFT: Weight Display — hero zone */}
-          <div className={`flex-1 rounded-xl border-2 p-4 flex flex-col items-center justify-center transition-all duration-300 ${weightBorderColor}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <Scale className={`w-5 h-5 ${weightColor}`} />
-              <span className="text-sm text-muted-foreground">Poids actuel</span>
-              <Badge className={`${badgeColor} text-xs`}>{badgeLabel}</Badge>
-            </div>
-
-            {/* GIANT weight display — readable from 1-2 meters */}
-            <div className={`text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold font-mono leading-none tracking-tight transition-colors duration-300 ${weightColor} ${sensor.weight.status === 'unstable' ? 'animate-pulse' : ''}`}>
-              {sensor.weight.value.toFixed(3)}
-            </div>
-
-            {/* Target info */}
-            {activeTask?.target_weight && (
-              <div className="mt-2 text-sm text-muted-foreground">
-                Cible: <span className="font-mono font-medium text-foreground">{activeTask.target_weight}</span>
-                <span className="mx-1">|</span>
-                Min: <span className="font-mono">{activeTask.tolerance_min}</span>
-                <span className="mx-1">—</span>
-                Max: <span className="font-mono">{activeTask.tolerance_max}</span>
+            {/* LEFT: Weight Display */}
+            <div className={`flex-1 rounded-xl border-2 p-4 flex flex-col items-center justify-center transition-all duration-300 ${weightBorderColor}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Scale className={`w-5 h-5 ${weightColor}`} />
+                <span className="text-sm text-muted-foreground">Poids actuel</span>
+                <Badge className={`${badgeColor} text-xs`}>{badgeLabel}</Badge>
               </div>
-            )}
 
-            {/* Unstable warning */}
-            {sensor.weight.status === 'unstable' && (
-              <div className="mt-2 text-sm text-orange-400 font-medium animate-pulse">
-                Stabilisation en cours...
+              <div className={`text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold font-mono leading-none tracking-tight transition-colors duration-300 ${weightColor} ${sensor.weight.status === 'unstable' ? 'animate-pulse' : ''}`}>
+                {sensor.weight.value.toFixed(3)}
               </div>
-            )}
 
-            {/* Progress bar — thin, under the weight */}
-            {isTaskActive && activeTask && (
-              <div className="w-full max-w-md mt-3">
-                <div className="w-full bg-gray-700/50 rounded-full h-2.5">
-                  <div
-                    className="bg-green-500 h-2.5 rounded-full transition-all duration-500"
-                    style={{ width: `${progressPct}%` }}
-                  />
+              {activeTask?.target_weight && (
+                <div className="mt-2 text-sm text-muted-foreground">
+                  Cible: <span className="font-mono font-medium text-foreground">{activeTask.target_weight}</span>
+                  <span className="mx-1">|</span>
+                  Min: <span className="font-mono">{activeTask.tolerance_min}</span>
+                  <span className="mx-1">—</span>
+                  Max: <span className="font-mono">{activeTask.tolerance_max}</span>
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>{activeTask.produced_quantity} pesé(s)</span>
-                  <span>{activeTask.target_quantity} cible</span>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
 
-          {/* RIGHT: Action buttons — large touch targets */}
-          <div className="w-48 sm:w-56 md:w-64 flex flex-col gap-2">
-            {/* Task control buttons */}
-            {isTaskActive && activeTask && (
-              <div className="flex flex-col gap-1.5">
-                {activeTask.status !== 'in_progress' ? (
-                  <Button
-                    onClick={() => setStatus('in_progress')}
-                    className="h-14 text-base font-semibold bg-green-600 hover:bg-green-700 text-white touch-manipulation"
-                  >
-                    <Play className="w-5 h-5 mr-2" />
-                    Démarrer
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => setStatus('paused')}
-                    className="h-12 text-sm font-medium bg-yellow-600 hover:bg-yellow-700 text-white touch-manipulation"
-                  >
-                    <Pause className="w-4 h-4 mr-2" />
-                    Pause
-                  </Button>
-                )}
-                <Button
-                  onClick={() => setStatus('completed')}
-                  variant="outline"
-                  className="h-10 text-sm border-blue-600/50 text-blue-400 hover:bg-blue-600/20 touch-manipulation"
-                >
-                  <Square className="w-4 h-4 mr-2" />
-                  Terminer
-                </Button>
-              </div>
-            )}
-
-            {/* CONFORME / NON CONFORME — the main action */}
-            {isTaskRunning ? (
-              <>
-                <Button
-                  onClick={() => confirmWeighing('conforme')}
-                  disabled={sensor.weight.status !== 'stable'}
-                  className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-green-600 hover:bg-green-500 active:bg-green-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
-                >
-                  <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
-                  Conforme
-                </Button>
-                <Button
-                  onClick={() => confirmWeighing('non_conforme')}
-                  disabled={sensor.weight.status !== 'stable'}
-                  className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-red-600 hover:bg-red-500 active:bg-red-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
-                >
-                  <XCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
-                  Non conforme
-                </Button>
-              </>
-            ) : !isTaskActive ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3">
-                <div className="text-sm text-muted-foreground text-center">Aucune tâche active</div>
-                <Button
-                  onClick={() => setShowCreateTask(!showCreateTask)}
-                  variant="outline"
-                  className="h-14 w-full text-base touch-manipulation"
-                >
-                  <PlusCircle className="w-5 h-5 mr-2" />
-                  Nouvelle tâche
-                </Button>
-              </div>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-sm text-muted-foreground text-center px-2">
-                  {activeTask?.status === 'paused'
-                    ? 'Tâche en pause. Appuyez sur Démarrer.'
-                    : 'Démarrez la tâche pour peser.'}
+              {sensor.weight.status === 'unstable' && (
+                <div className="mt-2 text-sm text-orange-400 font-medium animate-pulse">
+                  Stabilisation en cours...
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+              )}
 
-        {/* === ROW 2: Stats + Recent items (SECONDARY ZONE — compact) === */}
-        <div className="flex-shrink-0 flex gap-2 h-36 sm:h-40">
-          {/* Stats compact */}
-          <div className="w-48 sm:w-56 md:w-64 rounded-xl border border-border bg-card p-3 flex flex-col justify-center">
-            {stats.total > 0 ? (
-              <>
-                <div className="grid grid-cols-3 gap-1.5 text-center mb-2">
-                  <div className="rounded-lg bg-green-600/10 py-1.5">
-                    <div className="text-xl sm:text-2xl font-bold text-green-400">{stats.conformes}</div>
-                    <div className="text-[10px] text-green-400/70">Conformes</div>
-                  </div>
-                  <div className="rounded-lg bg-red-600/10 py-1.5">
-                    <div className="text-xl sm:text-2xl font-bold text-red-400">{stats.nonConformes}</div>
-                    <div className="text-[10px] text-red-400/70">Non conf.</div>
-                  </div>
-                  <div className="rounded-lg bg-blue-600/10 py-1.5">
-                    <div className="text-xl sm:text-2xl font-bold text-blue-400">{stats.total}</div>
-                    <div className="text-[10px] text-blue-400/70">Total</div>
-                  </div>
-                </div>
-                <div className="space-y-0.5">
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>Conformité</span>
-                    <span className={stats.tauxConformite >= 90 ? 'text-green-400' : stats.tauxConformite >= 70 ? 'text-yellow-400' : 'text-red-400'}>
-                      {stats.tauxConformite}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-1.5">
+              {isTaskActive && activeTask && (
+                <div className="w-full max-w-md mt-3">
+                  <div className="w-full bg-gray-700/50 rounded-full h-2.5">
                     <div
-                      className={`h-1.5 rounded-full transition-all duration-500 ${
-                        stats.tauxConformite >= 90 ? 'bg-green-500' : stats.tauxConformite >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${stats.tauxConformite}%` }}
+                      className="bg-green-500 h-2.5 rounded-full transition-all duration-500"
+                      style={{ width: `${progressPct}%` }}
                     />
                   </div>
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>{activeTask.produced_quantity} pesé(s)</span>
+                    <span>{activeTask.target_quantity} cible</span>
+                  </div>
                 </div>
-              </>
-            ) : (
-              <div className="text-xs text-muted-foreground text-center">Aucun pesage</div>
-            )}
+              )}
+            </div>
+
+            {/* RIGHT: Action buttons */}
+            <div className="w-48 sm:w-56 md:w-64 flex flex-col gap-2">
+              {isTaskActive && activeTask && (
+                <div className="flex flex-col gap-1.5">
+                  {activeTask.status !== 'in_progress' ? (
+                    <Button
+                      onClick={() => setStatus('in_progress')}
+                      className="h-14 text-base font-semibold bg-green-600 hover:bg-green-700 text-white touch-manipulation"
+                    >
+                      <Play className="w-5 h-5 mr-2" />
+                      Démarrer
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => setStatus('paused')}
+                      className="h-12 text-sm font-medium bg-yellow-600 hover:bg-yellow-700 text-white touch-manipulation"
+                    >
+                      <Pause className="w-4 h-4 mr-2" />
+                      Pause
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => setStatus('completed')}
+                    variant="outline"
+                    className="h-10 text-sm border-blue-600/50 text-blue-400 hover:bg-blue-600/20 touch-manipulation"
+                  >
+                    <Square className="w-4 h-4 mr-2" />
+                    Terminer
+                  </Button>
+                </div>
+              )}
+
+              {isTaskRunning ? (
+                <>
+                  <Button
+                    onClick={() => confirmWeighing('conforme')}
+                    disabled={sensor.weight.status !== 'stable'}
+                    className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-green-600 hover:bg-green-500 active:bg-green-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
+                  >
+                    <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
+                    Conforme
+                  </Button>
+                  <Button
+                    onClick={() => confirmWeighing('non_conforme')}
+                    disabled={sensor.weight.status !== 'stable'}
+                    className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-red-600 hover:bg-red-500 active:bg-red-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
+                  >
+                    <XCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
+                    Non conforme
+                  </Button>
+                </>
+              ) : !isTaskActive ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3">
+                  <div className="text-sm text-muted-foreground text-center">Aucune tâche active</div>
+                  <Button
+                    onClick={() => setShowCreateTask(!showCreateTask)}
+                    variant="outline"
+                    className="h-14 w-full text-base touch-manipulation"
+                  >
+                    <PlusCircle className="w-5 h-5 mr-2" />
+                    Nouvelle tâche
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-sm text-muted-foreground text-center px-2">
+                    {activeTask?.status === 'paused'
+                      ? 'Tâche en pause. Appuyez sur Démarrer.'
+                      : 'Démarrez la tâche pour peser.'}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Recent items — scrollable horizontal list */}
-          <div className="flex-1 rounded-xl border border-border bg-card p-2 overflow-hidden">
-            <div className="text-xs text-muted-foreground mb-1.5 px-1 font-medium">Derniers pesages</div>
-            {recentItems.length > 0 ? (
-              <div className="flex flex-col gap-1 overflow-y-auto h-[calc(100%-24px)] pr-1">
-                {recentItems.slice(0, 15).map((item, idx) => (
-                  <div key={item.id} className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs ${
-                    item.status === 'conforme' ? 'border-green-600/20 bg-green-600/5' : 'border-red-600/20 bg-red-600/5'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground w-5">#{recentItems.length - idx}</span>
-                      <span className="font-mono font-medium text-sm">{Number(item.weight).toFixed(3)}</span>
+          {/* === ROW 2: Stats + Recent items === */}
+          <div className="flex-shrink-0 flex gap-2 h-36 sm:h-40">
+            <div className="w-48 sm:w-56 md:w-64 rounded-xl border border-border bg-card p-3 flex flex-col justify-center">
+              {stats.total > 0 ? (
+                <>
+                  <div className="grid grid-cols-3 gap-1.5 text-center mb-2">
+                    <div className="rounded-lg bg-green-600/10 py-1.5">
+                      <div className="text-xl sm:text-2xl font-bold text-green-400">{stats.conformes}</div>
+                      <div className="text-[10px] text-green-400/70">Conformes</div>
                     </div>
-                    <span className={`text-[10px] font-medium ${
-                      item.status === 'conforme' ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      {item.status === 'conforme' ? 'OK' : 'NOK'}
-                    </span>
+                    <div className="rounded-lg bg-red-600/10 py-1.5">
+                      <div className="text-xl sm:text-2xl font-bold text-red-400">{stats.nonConformes}</div>
+                      <div className="text-[10px] text-red-400/70">Non conf.</div>
+                    </div>
+                    <div className="rounded-lg bg-blue-600/10 py-1.5">
+                      <div className="text-xl sm:text-2xl font-bold text-blue-400">{stats.total}</div>
+                      <div className="text-[10px] text-blue-400/70">Total</div>
+                    </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-xs text-muted-foreground text-center py-4">Aucun pesage</div>
-            )}
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>Conformité</span>
+                      <span className={stats.tauxConformite >= 90 ? 'text-green-400' : stats.tauxConformite >= 70 ? 'text-yellow-400' : 'text-red-400'}>
+                        {stats.tauxConformite}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-700 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all duration-500 ${
+                          stats.tauxConformite >= 90 ? 'bg-green-500' : stats.tauxConformite >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${stats.tauxConformite}%` }}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-muted-foreground text-center">Aucun pesage</div>
+              )}
+            </div>
+
+            <div className="flex-1 rounded-xl border border-border bg-card p-2 overflow-hidden">
+              <div className="text-xs text-muted-foreground mb-1.5 px-1 font-medium">Derniers pesages</div>
+              {recentItems.length > 0 ? (
+                <div className="flex flex-col gap-1 overflow-y-auto h-[calc(100%-24px)] pr-1">
+                  {recentItems.slice(0, 15).map((item, idx) => (
+                    <div key={item.id} className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs ${
+                      item.status === 'conforme' ? 'border-green-600/20 bg-green-600/5' : 'border-red-600/20 bg-red-600/5'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-5">#{recentItems.length - idx}</span>
+                        <span className="font-mono font-medium text-sm">{Number(item.weight).toFixed(3)}</span>
+                      </div>
+                      <span className={`text-[10px] font-medium ${
+                        item.status === 'conforme' ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {item.status === 'conforme' ? 'OK' : 'NOK'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground text-center py-4">Aucun pesage</div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ===== CREATE TASK MODAL — overlay when no task active ===== */}
-      {showCreateTask && !isTaskActive && (
+      {/* ===== CREATE TASK MODAL ===== */}
+      {showCreateTask && !isTaskActive && mode === 'unit' && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowCreateTask(false)}>
           <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-bold text-center">Nouvelle tâche</h2>

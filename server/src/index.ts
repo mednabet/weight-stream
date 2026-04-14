@@ -11,6 +11,7 @@ import { weightUnitsRouter } from './routes/weight-units.js';
 import { initDatabase } from './db/init.js';
 import { setupRouter } from './routes/setup.js';
 import { scaleProxyRouter } from './routes/scale-proxy.js';
+import { palletsRouter } from './routes/pallets.js';
 import { initPoolFromConfig, isPoolReady } from './db/connection.js';
 
 dotenv.config();
@@ -64,6 +65,7 @@ app.use('/api/tasks', tasksRouter);
 app.use('/api/terminals', terminalsRouter);
 app.use('/api/weight-units', weightUnitsRouter);
 app.use('/api/scale-proxy', scaleProxyRouter);
+app.use('/api/pallets', palletsRouter);
 
 // Health check
 app.get('/api/health', (_, res) => {

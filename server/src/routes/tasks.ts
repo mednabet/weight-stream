@@ -32,7 +32,8 @@ tasksRouter.get('/line/:lineId', async (req: AuthRequest, res: Response) => {
   try {
     const tasks = await query<any[]>(`
       SELECT pt.*, p.name as product_name, p.reference as product_reference,
-             p.target_weight, p.tolerance_min, p.tolerance_max
+             p.target_weight, p.tolerance_min, p.tolerance_max,
+             p.units_per_pallet, p.pallet_target_weight, p.pallet_tolerance_min, p.pallet_tolerance_max
       FROM production_tasks pt
       LEFT JOIN products p ON pt.product_id = p.id
       WHERE pt.line_id = ?

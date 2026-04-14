@@ -49,6 +49,10 @@ export async function initDatabase() {
         target_weight DECIMAL(10,3) NOT NULL,
         tolerance_min DECIMAL(10,3) NOT NULL,
         tolerance_max DECIMAL(10,3) NOT NULL,
+        units_per_pallet INT DEFAULT 1,
+        pallet_target_weight DECIMAL(10,3),
+        pallet_tolerance_min DECIMAL(10,3),
+        pallet_tolerance_max DECIMAL(10,3),
         weight_unit_id CHAR(36),
         is_active BOOLEAN DEFAULT TRUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -57,12 +61,28 @@ export async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    // Add pallet columns to products if they don't exist (migration)
+    const palletProductCols = [
+      { name: 'units_per_pallet', def: 'INT DEFAULT 1 AFTER tolerance_max' },
+      { name: 'pallet_target_weight', def: 'DECIMAL(10,3) AFTER units_per_pallet' },
+      { name: 'pallet_tolerance_min', def: 'DECIMAL(10,3) AFTER pallet_target_weight' },
+      { name: 'pallet_tolerance_max', def: 'DECIMAL(10,3) AFTER pallet_tolerance_min' },
+    ];
+    for (const col of palletProductCols) {
+      try {
+        await conn.query(`ALTER TABLE products ADD COLUMN ${col.name} ${col.def}`);
+      } catch (e: any) {
+        if (!e.message?.includes('Duplicate column')) throw e;
+      }
+    }
+
     await conn.query(`
       CREATE TABLE IF NOT EXISTS production_lines (
         id CHAR(36) PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         description TEXT,
         scale_url VARCHAR(255),
+        pallet_scale_url VARCHAR(255),
         weight_unit_id CHAR(36),
         is_active BOOLEAN DEFAULT TRUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -70,6 +90,14 @@ export async function initDatabase() {
         CONSTRAINT fk_lines_weight_unit FOREIGN KEY (weight_unit_id) REFERENCES weight_units(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // Add pallet_scale_url column if it doesn't exist (migration)
+    try {
+      await conn.query(`ALTER TABLE production_lines ADD COLUMN pallet_scale_url VARCHAR(255) AFTER scale_url`);
+    } catch (e: any) {
+      // Column already exists, ignore
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
 
     await conn.query(`
       CREATE TABLE IF NOT EXISTS terminals (
@@ -115,6 +143,24 @@ export async function initDatabase() {
         captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT fk_items_task FOREIGN KEY (task_id) REFERENCES production_tasks(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Pallets table for pallet weighing
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS pallets (
+        id CHAR(36) PRIMARY KEY,
+        task_id CHAR(36) NOT NULL,
+        pallet_number INT NOT NULL,
+        ticket_number VARCHAR(50) UNIQUE NOT NULL,
+        units_count INT NOT NULL,
+        weight DECIMAL(10,3) NOT NULL,
+        status ENUM('conforme', 'non_conforme') NOT NULL,
+        operator_id CHAR(36),
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_pallets_task FOREIGN KEY (task_id) REFERENCES production_tasks(id),
+        CONSTRAINT fk_pallets_operator FOREIGN KEY (operator_id) REFERENCES users(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
