@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export type DbType = 'postgresql';
+export type DbType = 'mysql';
 
 export interface DbConfig {
   type: DbType;
@@ -27,7 +27,6 @@ function getConfigPath() {
   if (custom && custom.trim()) return custom;
 
   // Default: <server_root>/data/app-config.json
-  // When running from compiled dist, process.cwd() is typically the server directory
   return path.join(process.cwd(), 'data', 'app-config.json');
 }
 
@@ -37,9 +36,9 @@ export function loadAppConfig(): AppConfig | null {
     return {
       initialized: true,
       db: {
-        type: 'postgresql',
+        type: 'mysql',
         host: process.env.DB_HOST,
-        port: parseInt(process.env.DB_PORT || '5432', 10),
+        port: parseInt(process.env.DB_PORT || '3306', 10),
         database: process.env.DB_NAME,
         username: process.env.DB_USER,
         password: process.env.DB_PASSWORD || '',

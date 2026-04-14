@@ -18,7 +18,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
   try {
     const users = await query<any[]>(
-      'SELECT id, email, password_hash, is_active FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, is_active FROM users WHERE email = ?',
       [email]
     );
 
@@ -38,7 +38,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     }
 
     const roles = await query<any[]>(
-      'SELECT role FROM user_roles WHERE user_id = $1 ORDER BY role LIMIT 1',
+      'SELECT role FROM user_roles WHERE user_id = ? ORDER BY role LIMIT 1',
       [user.id]
     );
 
@@ -91,7 +91,7 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
     const isFirstUser = parseInt(admins[0].count) === 0;
 
     const existing = await query<any[]>(
-      'SELECT id FROM users WHERE email = $1',
+      'SELECT id FROM users WHERE email = ?',
       [email]
     );
 
@@ -103,14 +103,14 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     await query(
-      'INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)',
+      'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
       [userId, email, passwordHash]
     );
 
     // First user becomes admin
     const role = isFirstUser ? 'admin' : 'operator';
     await query(
-      'INSERT INTO user_roles (id, user_id, role) VALUES ($1, $2, $3)',
+      'INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)',
       [uuidv4(), userId, role]
     );
 

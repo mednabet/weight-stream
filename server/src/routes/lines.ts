@@ -34,8 +34,8 @@ linesRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
     const id = uuidv4();
     await query(
       `INSERT INTO production_lines (id, name, description, scale_url, weight_unit_id) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, name, description, scale_url, weight_unit_id]
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, name, description || null, scale_url || null, weight_unit_id || null]
     );
 
     res.json({ id, name, description, scale_url, weight_unit_id });
@@ -52,9 +52,9 @@ linesRouter.put('/:id', requireRole('admin', 'supervisor'), async (req: AuthRequ
 
   try {
     await query(
-      `UPDATE production_lines SET name = $1, description = $2, scale_url = $3, 
-       weight_unit_id = $4, is_active = $5 WHERE id = $6`,
-      [name, description, scale_url, weight_unit_id, is_active, id]
+      `UPDATE production_lines SET name = ?, description = ?, scale_url = ?, 
+       weight_unit_id = ?, is_active = ? WHERE id = ?`,
+      [name, description || null, scale_url || null, weight_unit_id || null, is_active ?? true, id]
     );
     res.json({ success: true });
   } catch (err) {
@@ -68,7 +68,7 @@ linesRouter.delete('/:id', requireRole('admin', 'supervisor'), async (req: AuthR
   const { id } = req.params;
 
   try {
-    await query('DELETE FROM production_lines WHERE id = $1', [id]);
+    await query('DELETE FROM production_lines WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete line error:', err);

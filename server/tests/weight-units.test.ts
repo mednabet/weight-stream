@@ -64,7 +64,7 @@ class WeightUnitsTestSuite {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: 'admin@test.com',
-          password: 'admin123'
+          password: 'Admin123456!@'
         })
       });
 

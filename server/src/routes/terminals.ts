@@ -33,13 +33,13 @@ terminalsRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthRe
   try {
     const id = uuidv4();
     await query(
-      'INSERT INTO terminals (id, device_uid, name, line_id, ip_address) VALUES ($1, $2, $3, $4, $5)',
-      [id, device_uid, name, line_id, ip_address]
+      'INSERT INTO terminals (id, device_uid, name, line_id, ip_address) VALUES (?, ?, ?, ?, ?)',
+      [id, device_uid, name, line_id || null, ip_address || null]
     );
 
     res.json({ id, device_uid, name, line_id, ip_address });
   } catch (err: any) {
-    if (err.code === '23505') { // PostgreSQL unique violation
+    if (err.code === 'ER_DUP_ENTRY') { // MySQL unique violation
       return res.status(400).json({ error: 'UID déjà utilisé' });
     }
     console.error('Create terminal error:', err);
@@ -54,8 +54,8 @@ terminalsRouter.put('/:id', requireRole('admin', 'supervisor'), async (req: Auth
 
   try {
     await query(
-      'UPDATE terminals SET name = $1, line_id = $2, ip_address = $3 WHERE id = $4',
-      [name, line_id, ip_address, id]
+      'UPDATE terminals SET name = ?, line_id = ?, ip_address = ? WHERE id = ?',
+      [name, line_id || null, ip_address || null, id]
     );
     res.json({ success: true });
   } catch (err) {
@@ -70,7 +70,7 @@ terminalsRouter.post('/:id/ping', async (req: AuthRequest, res: Response) => {
 
   try {
     await query(
-      'UPDATE terminals SET is_online = TRUE, last_ping = NOW() WHERE id = $1',
+      'UPDATE terminals SET is_online = TRUE, last_ping = NOW() WHERE id = ?',
       [id]
     );
     res.json({ success: true });
@@ -85,7 +85,7 @@ terminalsRouter.delete('/:id', requireRole('admin', 'supervisor'), async (req: A
   const { id } = req.params;
 
   try {
-    await query('DELETE FROM terminals WHERE id = $1', [id]);
+    await query('DELETE FROM terminals WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete terminal error:', err);
