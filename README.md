@@ -2,118 +2,140 @@
 
 **Application de gestion des lignes de production avec pesage automatique et contrôle qualité.**
 
-Développé par [NETPROCESS](https://netprocess.ma) - Solutions digitales innovantes pour l'industrie.
+Développé par [NETPROCESS](https://netprocess.ma) — Mohammed NABET (+212 661 550 618)
 
 ---
 
-## 🚀 Démarrage Rapide
+## Démarrage rapide
 
-### Installation Auto-hébergée (Recommandé)
+### Ubuntu (Production)
 
 ```bash
-# Cloner le repository
 git clone https://github.com/mednabet/weight-stream.git
 cd weight-stream
-
-# Exécuter le script d'installation (Ubuntu + MySQL)
 sudo bash scripts/install-ubuntu-mysql.sh
 ```
 
-### Développement Local
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/mednabet/weight-stream.git
+cd weight-stream
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\install-windows.ps1
+```
+
+### Développement local
 
 ```bash
-# Installer les dépendances
-npm install
+# Frontend (terminal 1)
+npm install && npm run dev
 
-# Démarrer le frontend
-npm run dev
-
-# Dans un autre terminal, démarrer le backend
+# Backend (terminal 2)
 cd server && npm install && npm run dev
 ```
 
 ---
 
-## 📋 Fonctionnalités
+## Fonctionnalités
 
 | Fonctionnalité | Description |
 |----------------|-------------|
-| **Gestion des lignes de production** | Configuration et supervision des lignes en temps réel |
-| **Pesage automatique** | Intégration avec balances industrielles et cellules photoélectriques |
+| **Gestion des lignes** | Configuration et supervision des lignes en temps réel |
+| **Pesage automatique** | Intégration avec balances industrielles (unitaire + palette) |
 | **Contrôle qualité** | Validation des poids avec tolérances min/max configurables |
+| **Gestion des palettes** | Pesage palette avec rapprochement production/conditionnement |
 | **Unités de mesure** | Support des unités métriques (kg, g) et impériales (lb, oz) |
 | **Gestion des utilisateurs** | Rôles hiérarchiques (admin, superviseur, opérateur) |
 | **Tableaux de bord** | Statistiques et monitoring en temps réel |
-| **Interface tactile** | Mode kiosque optimisé pour les opérateurs |
+| **Interface tactile** | Mode kiosque optimisé pour écran POS |
 
 ---
 
-## 🖥️ Installation Auto-hébergée
+## Installation
 
 ### Prérequis
 
-| Composant | Version minimale |
-|-----------|------------------|
-| Ubuntu Server | 20.04 LTS |
-| Node.js | 20.x |
-| MySQL | 8.0 |
-| RAM | 1 GB |
-| Espace disque | 2 GB |
+| Composant | Ubuntu | Windows |
+|-----------|--------|---------|
+| **OS** | Ubuntu 22.04 LTS+ | Windows 10/11 |
+| **Node.js** | 22.x | 22.x |
+| **MySQL** | 8.0+ | 8.0+ |
+| **RAM** | 2 GB minimum | 4 GB minimum |
+| **Disque** | 2 GB | 2 GB |
 
-### Installation Automatique
+### Ubuntu — Installation automatique
 
-Le script d'installation configure automatiquement tous les composants nécessaires :
+Le script configure automatiquement tous les composants : Node.js, MySQL, Nginx, systemd, pare-feu et sauvegardes.
 
 ```bash
-# Installation standard
+# Installation standard (demande le nom de domaine)
 sudo bash scripts/install-ubuntu-mysql.sh
 
 # Avec nom de domaine prédéfini
 sudo bash scripts/install-ubuntu-mysql.sh --server-name=production.example.com
-
-# Sans exécution des tests
-sudo bash scripts/install-ubuntu-mysql.sh --skip-tests
 ```
 
 Le script effectue les opérations suivantes :
-- Installation de Node.js, MySQL et Nginx
-- Configuration de la base de données
-- Déploiement de l'application
-- Création des unités de poids par défaut (kg, g, lb, oz)
-- Configuration de PM2 pour la gestion des processus
-- Mise en place des sauvegardes automatiques
 
-### Configuration Manuelle
+1. Installation de Node.js 22.x, MySQL 8.0 et Nginx
+2. Création de la base de données et de l'utilisateur MySQL
+3. Clonage, build frontend et backend
+4. Configuration Nginx (reverse proxy, gzip, cache)
+5. Création du service systemd
+6. Configuration du pare-feu (UFW)
+7. Mise en place des sauvegardes automatiques quotidiennes
+
+### Windows — Installation automatique
+
+Le script PowerShell vérifie les prérequis, configure MySQL, clone le projet, installe les dépendances et crée un script de lancement.
+
+```powershell
+# Ouvrir PowerShell en tant qu'Administrateur
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\install-windows.ps1
+```
+
+Après l'installation, lancez l'application avec :
+
+```cmd
+C:\WeightStream\start.bat
+```
+
+### Installation manuelle
 
 Pour une installation personnalisée, consultez le guide détaillé : [docs/INSTALLATION_UBUNTU_MYSQL.md](docs/INSTALLATION_UBUNTU_MYSQL.md)
 
 ---
 
-## 📁 Structure du Projet
+## Structure du projet
 
 ```
 weight-stream/
-├── docs/                    # Documentation
-├── scripts/                 # Scripts d'installation
-│   └── install-ubuntu-mysql.sh
-├── server/                  # Backend Node.js
+├── docs/                        # Documentation
+│   └── INSTALLATION_UBUNTU_MYSQL.md
+├── scripts/                     # Scripts d'installation
+│   ├── install-ubuntu-mysql.sh  # Installation Ubuntu + MySQL
+│   └── install-windows.ps1      # Installation Windows
+├── server/                      # Backend Node.js
 │   ├── src/
-│   │   ├── db/              # Connexion et initialisation BDD
-│   │   ├── middleware/      # Authentification JWT
-│   │   └── routes/          # API REST
-│   └── tests/               # Tests automatisés
-├── src/                     # Frontend React
-│   ├── components/          # Composants UI
-│   ├── contexts/            # Contextes React (Auth)
-│   ├── hooks/               # Hooks personnalisés
-│   ├── lib/                 # Utilitaires et API client
-│   └── pages/               # Pages de l'application
-└── supabase/                # Configuration Supabase (optionnel)
+│   │   ├── config/              # Configuration applicative
+│   │   ├── db/                  # Connexion et initialisation BDD
+│   │   ├── middleware/          # Authentification JWT, validation
+│   │   └── routes/              # API REST
+│   └── .env.example             # Modèle de configuration
+├── src/                         # Frontend React
+│   ├── components/              # Composants UI (shadcn/ui)
+│   ├── contexts/                # Contextes React (Auth)
+│   ├── hooks/                   # Hooks personnalisés
+│   ├── lib/                     # Utilitaires et API client
+│   └── pages/                   # Pages de l'application
+└── package.json
 ```
 
 ---
 
-## 👥 Rôles Utilisateurs
+## Rôles utilisateurs
 
 | Rôle | Description | Permissions |
 |------|-------------|-------------|
@@ -123,20 +145,7 @@ weight-stream/
 
 ---
 
-## ⚖️ Unités de Mesure
-
-L'application supporte les unités de poids suivantes (configurables) :
-
-| Code | Nom | Symbole | Décimales |
-|------|-----|---------|-----------|
-| KG | Kilogramme | kg | 3 |
-| G | Gramme | g | 0 |
-| LB | Livre | lb | 2 |
-| OZ | Once | oz | 1 |
-
----
-
-## 🛠️ Technologies
+## Technologies
 
 | Catégorie | Technologies |
 |-----------|--------------|
@@ -144,286 +153,62 @@ L'application supporte les unités de poids suivantes (configurables) :
 | **Backend** | Node.js, Express, TypeScript |
 | **Base de données** | MySQL 8.0 |
 | **Authentification** | JWT (JSON Web Tokens) |
-| **Process Manager** | PM2 |
-| **Serveur Web** | Nginx |
+| **Sécurité** | Helmet, express-rate-limit, bcrypt 12 rounds |
+| **Serveur Web** | Nginx (Ubuntu), serve (Windows) |
 
 ---
 
-## 🔒 Sécurité
-
-L'application intègre plusieurs couches de sécurité :
+## Sécurité
 
 | Mesure | Description |
 |--------|-------------|
-| Authentification JWT | Tokens sécurisés avec expiration configurable |
-| Chiffrement bcrypt | Mots de passe hashés avec salt |
-| Validation des entrées | Côté client et serveur |
-| Headers de sécurité | X-Frame-Options, X-Content-Type-Options, X-XSS-Protection |
-| CORS configuré | Origines autorisées définies |
+| **JWT obligatoire** | Secret min 32 caractères, refus de démarrer sinon |
+| **Helmet** | Headers de sécurité HTTP (HSTS, X-Frame-Options, etc.) |
+| **Rate limiting** | 500 req/15min global, 15/15min sur auth |
+| **CORS strict** | Origines autorisées uniquement, pas de wildcard |
+| **Bcrypt 12 rounds** | Hachage sécurisé des mots de passe |
+| **Setup verrouillé** | Routes de configuration bloquées après installation |
+| **Signup verrouillé** | Inscription désactivée après le premier admin |
+| **Proxy sécurisé** | Whitelist des URLs de balance configurées |
 
 ---
 
-## 🧪 Tests
+## Commandes utiles
 
-Exécution des tests automatisés :
+### Ubuntu (systemd)
 
 ```bash
-# Tests des unités de mesure
-cd server && node tests/weight-units.test.js
+sudo systemctl status weight-stream     # Statut du backend
+sudo journalctl -u weight-stream -f     # Logs en temps réel
+sudo systemctl restart weight-stream    # Redémarrer le backend
+curl -s http://localhost:3001/api/health # Health check
+sudo /usr/local/bin/backup-weight-stream.sh  # Sauvegarde manuelle
 ```
 
-Les tests vérifient les opérations CRUD sur les unités de poids et garantissent la non-régression.
+### Windows
+
+```cmd
+C:\WeightStream\start.bat              # Démarrer l'application
+```
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Guide d'installation](docs/INSTALLATION_UBUNTU_MYSQL.md) | Installation complète Ubuntu + MySQL |
-| [Tests automatisés](server/tests/README.md) | Documentation des tests |
-| [Schéma SQL](src/lib/database/schema.sql) | Structure de la base de données |
+| [Guide d'installation Ubuntu](docs/INSTALLATION_UBUNTU_MYSQL.md) | Installation complète Ubuntu + MySQL |
+| [Script Ubuntu](scripts/install-ubuntu-mysql.sh) | Installation automatique Ubuntu |
+| [Script Windows](scripts/install-windows.ps1) | Installation automatique Windows |
 
 ---
 
-## 🔧 Commandes Utiles
-
-```bash
-# Logs du backend
-pm2 logs weight-stream-api
-
-# Redémarrer le backend
-pm2 restart weight-stream-api
-
-# Statut des services
-pm2 status
-
-# Monitoring temps réel
-pm2 monit
-
-# Sauvegarde manuelle de la base de données
-sudo /usr/local/bin/backup-weight-stream.sh
-```
-
----
-
-# Script pour installation windows :
-
-@echo off
-setlocal enabledelayedexpansion
-title Weight Stream - Setup Windows
-
-echo =========================================================
-echo   WEIGHT STREAM - INSTALLATION AUTOMATIQUE WINDOWS
-echo =========================================================
-echo.
-
-REM ---------------------------------------------------------
-REM 0) Verification des prerequis
-REM ---------------------------------------------------------
-where git >nul 2>nul
-if errorlevel 1 (
-    echo [ERREUR] Git n'est pas installe ou n'est pas dans le PATH.
-    echo Installe Git puis relance ce script.
-    pause
-    exit /b 1
-)
-
-where node >nul 2>nul
-if errorlevel 1 (
-    echo [ERREUR] Node.js n'est pas installe ou n'est pas dans le PATH.
-    echo Installe Node.js 20+ puis relance ce script.
-    pause
-    exit /b 1
-)
-
-where npm >nul 2>nul
-if errorlevel 1 (
-    echo [ERREUR] npm n'est pas disponible.
-    pause
-    exit /b 1
-)
-
-echo [OK] Git detecte
-echo [OK] Node.js detecte
-echo [OK] npm detecte
-echo.
-
-for /f "delims=" %%i in ('node -v') do set NODE_VER=%%i
-for /f "delims=" %%i in ('npm -v') do set NPM_VER=%%i
-
-echo Version Node.js : %NODE_VER%
-echo Version npm     : %NPM_VER%
-echo.
-
-REM ---------------------------------------------------------
-REM 1) Se placer dans le dossier du script
-REM ---------------------------------------------------------
-cd /d "%~dp0"
-
-if not exist package.json (
-    echo [ERREUR] package.json introuvable.
-    echo Place ce fichier setup-windows.bat a la racine du projet weight-stream.
-    pause
-    exit /b 1
-)
-
-if not exist server\package.json (
-    echo [ERREUR] server\package.json introuvable.
-    echo Le projet semble incomplet.
-    pause
-    exit /b 1
-)
-
-echo [OK] Structure du projet detectee
-echo.
-
-REM ---------------------------------------------------------
-REM 2) Creation du fichier .env si absent
-REM ---------------------------------------------------------
-if not exist .env (
-    if exist .env.example (
-        echo [INFO] Creation du fichier .env a partir de .env.example
-        copy /Y ".env.example" ".env" >nul
-        echo [OK] .env cree
-    ) else (
-        echo [INFO] Aucun .env.example trouve, creation d'un .env minimal
-        (
-            echo DB_TYPE=mysql
-            echo DB_HOST=localhost
-            echo DB_PORT=3306
-            echo DB_NAME=production_manager
-            echo DB_USER=prod_app
-            echo DB_PASSWORD=CHANGEZ_CE_MOT_DE_PASSE
-            echo VITE_APP_URL=http://localhost:8080
-            echo VITE_API_URL=http://localhost:3000/api
-            echo API_PORT=3000
-            echo JWT_SECRET=CHANGEZ_CETTE_CLE_SECRETE_TRES_LONGUE
-            echo SESSION_TIMEOUT=480
-            echo NODE_ENV=development
-            echo DEBUG=true
-        ) > .env
-        echo [OK] .env minimal cree
-    )
-) else (
-    echo [INFO] Le fichier .env existe deja, aucune modification
-)
-echo.
-
-REM ---------------------------------------------------------
-REM 3) Installation frontend
-REM ---------------------------------------------------------
-echo =========================================================
-echo Installation des dependances FRONTEND...
-echo =========================================================
-call npm install
-if errorlevel 1 (
-    echo [ERREUR] Echec de npm install a la racine.
-    pause
-    exit /b 1
-)
-echo [OK] Frontend installe
-echo.
-
-REM ---------------------------------------------------------
-REM 4) Installation backend
-REM ---------------------------------------------------------
-echo =========================================================
-echo Installation des dependances BACKEND...
-echo =========================================================
-pushd server
-call npm install
-if errorlevel 1 (
-    popd
-    echo [ERREUR] Echec de npm install dans le dossier server.
-    pause
-    exit /b 1
-)
-popd
-echo [OK] Backend installe
-echo.
-
-REM ---------------------------------------------------------
-REM 5) Menu de lancement
-REM ---------------------------------------------------------
-:menu
-echo =========================================================
-echo Installation terminee
-echo =========================================================
-echo 1 - Lancer frontend + backend
-echo 2 - Lancer frontend seulement
-echo 3 - Lancer backend seulement
-echo 4 - Ouvrir le dossier .env
-echo 5 - Quitter
-echo.
-set /p choice=Choix :
-
-if "%choice%"=="1" goto run_all
-if "%choice%"=="2" goto run_front
-if "%choice%"=="3" goto run_back
-if "%choice%"=="4" goto open_env
-if "%choice%"=="5" goto end
-
-echo Choix invalide.
-echo.
-goto menu
-
-:run_all
-echo [INFO] Lancement du backend...
-start "Weight Stream Backend" cmd /k "cd /d "%~dp0server" && npm run dev"
-
-timeout /t 2 /nobreak >nul
-
-echo [INFO] Lancement du frontend...
-start "Weight Stream Frontend" cmd /k "cd /d "%~dp0" && npm run dev"
-
-echo.
-echo [OK] Les deux services ont ete lances dans deux fenetres separees.
-echo Frontend : verifier l'URL affichee par Vite
-echo Backend  : verifier le port API affiche
-echo.
-pause
-goto end
-
-:run_front
-start "Weight Stream Frontend" cmd /k "cd /d "%~dp0" && npm run dev"
-goto end
-
-:run_back
-start "Weight Stream Backend" cmd /k "cd /d "%~dp0server" && npm run dev"
-goto end
-
-:open_env
-start "" notepad "%~dp0.env"
-goto menu
-
-:end
-endlocal
-exit /b 0
-
-# Utilisation
-Mets ce fichier dans le dossier racine du projet, au même niveau que package.json.
-Nomme-le par exemple setup-windows.bat.
-Clique droit → Exécuter ou lance-le depuis cmd.
-Le script :
-vérifie git, node, npm,
-crée .env depuis .env.example si besoin,
-installe les dépendances frontend et backend,
-peut lancer les deux serveurs.
-Ces étapes correspondent bien à la structure et aux scripts présents dans le dépôt.
-
-## 📞 Support
+## Support
 
 Pour toute question ou assistance technique, contactez [NETPROCESS](https://netprocess.ma).
 
 ---
 
-## 📄 Licence
-
-© 2024 [NETPROCESS](https://netprocess.ma). Tous droits réservés.
-
----
-
-**Version** : 2.1.0  
-**Dernière mise à jour** : Décembre 2024  
-**Développeur** : [NETPROCESS](https://netprocess.ma)
+**Version** : 4.0.0
+**Dernière mise à jour** : Avril 2026
+**Auteur** : [NETPROCESS](https://netprocess.ma) — Mohammed NABET (+212 661 550 618)
