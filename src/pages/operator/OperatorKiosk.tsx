@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { useProducts } from '@/hooks/useProductionData';
@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/hooks/use-toast';
-import { Play, Pause, CheckCircle, XCircle, LogOut, Scale, Maximize, Minimize, Square, PlusCircle, Package, Activity, TrendingUp, Clock, ChevronRight, Undo2, Trash2, RotateCcw } from 'lucide-react';
+import { Play, Pause, CheckCircle, XCircle, LogOut, Scale, Maximize, Minimize, Square, PlusCircle, Package, Activity, TrendingUp, Clock, ChevronRight, Undo2, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
 import { PalletKiosk } from './PalletKiosk';
 
 interface Line { id: string; name: string; status?: string; scale_url?: string | null; pallet_scale_url?: string | null }
@@ -35,6 +34,12 @@ interface ProductionItem {
 
 interface OperatorKioskProps {
   embedded?: boolean;
+}
+
+/* ─── Panel message type ─── */
+interface PanelMessage {
+  text: string;
+  type: 'success' | 'error' | 'info' | 'warning';
 }
 
 /* ─────────────── Panel wrapper component ─────────────── */
@@ -75,6 +80,22 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [mode, setMode] = useState<'unit' | 'pallet'>('unit');
+
+  // Panel message state (replaces toast)
+  const [panelMessage, setPanelMessage] = useState<PanelMessage | null>(null);
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const showMessage = useCallback((text: string, type: PanelMessage['type'] = 'info') => {
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
+    setPanelMessage({ text, type });
+    messageTimerRef.current = setTimeout(() => {
+      setPanelMessage(null);
+      messageTimerRef.current = null;
+    }, 3000);
+  }, []);
 
   const selectedLine = useMemo(() => lines.find(l => l.id === lineId) || null, [lines, lineId]);
   const sensor = useSensorData({ scaleUrl: selectedLine?.scale_url, pollingInterval: 800 });
@@ -175,9 +196,9 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       setActiveTaskId((created as any).id);
       await loadTasks(lineId);
       setShowCreateTask(false);
-      toast({ title: 'Tâche créée', description: 'Vous pouvez démarrer la production.' });
+      showMessage('Tâche créée avec succès', 'success');
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || 'Impossible de créer la tâche', variant: 'destructive' });
+      showMessage(e?.message || 'Impossible de créer la tâche', 'error');
     }
   };
 
@@ -191,8 +212,15 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
         setShowCreateTask(false);
       }
       await loadTasks(lineId);
+      const labels: Record<string, string> = {
+        in_progress: 'Tâche démarrée',
+        paused: 'Tâche en pause',
+        completed: 'Tâche terminée',
+        cancelled: 'Tâche annulée',
+      };
+      showMessage(labels[status] || 'Statut mis à jour', status === 'completed' ? 'info' : 'success');
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || 'Impossible de changer le statut', variant: 'destructive' });
+      showMessage(e?.message || 'Impossible de changer le statut', 'error');
     }
   };
 
@@ -200,7 +228,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     if (!activeTaskId) return;
     const weight = sensor.weight.value || 0;
     if (!weight) {
-      toast({ title: 'Poids invalide', description: 'Aucun poids détecté (ou 0).', variant: 'destructive' });
+      showMessage('Aucun poids détecté (ou 0)', 'error');
       return;
     }
     try {
@@ -208,9 +236,9 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       await loadTasks(lineId);
       await loadRecentItems(activeTaskId);
       const label = conformityStatus === 'conforme' ? 'Conforme' : 'Non conforme';
-      toast({ title: label, description: `Poids: ${weight.toFixed(3)}` });
+      showMessage(`${label} — ${weight.toFixed(3)} kg`, conformityStatus === 'conforme' ? 'success' : 'warning');
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || "Impossible d'enregistrer", variant: 'destructive' });
+      showMessage(e?.message || "Impossible d'enregistrer", 'error');
     }
   };
 
@@ -224,22 +252,24 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     try {
       await apiClient.reopenTask(lastCompletedTask.id);
       await loadTasks(lineId);
-      toast({ title: 'Tâche réouverte', description: `La tâche "${lastCompletedTask.product_name}" a été réouverte.` });
+      showMessage(`Tâche "${lastCompletedTask.product_name}" réouverte`, 'success');
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || 'Impossible de réouvrir la tâche', variant: 'destructive' });
+      showMessage(e?.message || 'Impossible de réouvrir la tâche', 'error');
     }
   };
 
-  // Delete last production item
+  // Delete last production item (with confirmation)
   const deleteLastItem = async () => {
     if (!activeTaskId || recentItems.length === 0) return;
     try {
       await apiClient.deleteLastProductionItem(activeTaskId);
       await loadTasks(lineId);
       await loadRecentItems(activeTaskId);
-      toast({ title: 'Pesage supprimé', description: 'Le dernier pesage a été supprimé.' });
+      setShowDeleteConfirm(false);
+      showMessage('Dernier pesage supprimé', 'info');
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || 'Impossible de supprimer le pesage', variant: 'destructive' });
+      setShowDeleteConfirm(false);
+      showMessage(e?.message || 'Impossible de supprimer le pesage', 'error');
     }
   };
 
@@ -277,6 +307,21 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const arcRadius = 44;
   const arcCircumference = 2 * Math.PI * arcRadius;
   const arcOffset = arcCircumference - (progressPct / 100) * arcCircumference;
+
+  // === Message styling ===
+  const messageStyles: Record<PanelMessage['type'], string> = {
+    success: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
+    error: 'bg-rose-500/20 border-rose-500/40 text-rose-300',
+    warning: 'bg-amber-500/20 border-amber-500/40 text-amber-300',
+    info: 'bg-sky-500/20 border-sky-500/40 text-sky-300',
+  };
+
+  const messageIcons: Record<PanelMessage['type'], React.ReactNode> = {
+    success: <CheckCircle className="w-4 h-4" />,
+    error: <XCircle className="w-4 h-4" />,
+    warning: <AlertTriangle className="w-4 h-4" />,
+    info: <Activity className="w-4 h-4" />,
+  };
 
   return (
     <div className={`${embedded ? '' : 'h-screen'} bg-[#0a0e1a] flex flex-col overflow-hidden select-none`}>
@@ -475,6 +520,14 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                   isStable ? 'bg-emerald-500' : isUnstable ? 'bg-amber-500' : isError ? 'bg-red-500' : 'bg-slate-700'
                 }`} />
 
+                {/* ── Message temporaire dans le panel ── */}
+                {panelMessage && (
+                  <div className={`absolute top-3 left-4 right-4 z-20 flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-semibold transition-all duration-300 animate-in fade-in slide-in-from-top-2 ${messageStyles[panelMessage.type]}`}>
+                    {messageIcons[panelMessage.type]}
+                    <span>{panelMessage.text}</span>
+                  </div>
+                )}
+
                 {/* Weight value */}
                 <div className={`relative z-10 text-6xl sm:text-7xl md:text-8xl font-bold font-mono leading-none tracking-tighter transition-all duration-300 ${weightColor} ${isUnstable ? 'animate-pulse' : ''}`}>
                   {sensor.weight.value.toFixed(3)}
@@ -651,7 +704,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
               <div className="flex items-center gap-2">
                 {recentItems.length > 0 && isTaskActive && (
                   <button
-                    onClick={deleteLastItem}
+                    onClick={() => setShowDeleteConfirm(true)}
                     className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
                   >
                     <Undo2 className="w-3.5 h-3.5" />
@@ -695,6 +748,42 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
               </div>
             )}
           </Panel>
+        </div>
+      )}
+
+      {/* ===== CONFIRMATION SUPPRESSION MODAL ===== */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-[#141b2d] rounded-3xl border border-white/[0.08] p-8 w-full max-w-sm space-y-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-2xl bg-rose-500/10 flex items-center justify-center mx-auto mb-3">
+                <AlertTriangle className="w-7 h-7 text-rose-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Confirmer la suppression</h2>
+              <p className="text-sm text-slate-400 mt-2">
+                Voulez-vous supprimer le dernier pesage
+                {recentItems.length > 0 && (
+                  <span className="font-mono font-bold text-white"> ({Number(recentItems[0]?.weight).toFixed(3)} kg)</span>
+                )}
+                ?
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Cette action est irréversible.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 h-14 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 text-base font-medium hover:bg-white/[0.08] active:scale-[0.97] transition-all touch-manipulation"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={deleteLastItem}
+                className="flex-1 h-14 rounded-xl bg-rose-600 border border-rose-500/30 text-white text-base font-semibold hover:bg-rose-500 active:scale-[0.97] transition-all touch-manipulation shadow-lg shadow-rose-900/30"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

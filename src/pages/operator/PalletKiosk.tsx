@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { useSensorData } from '@/hooks/useSensorData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/hooks/use-toast';
 import {
   CheckCircle, XCircle, Scale, Package, ArrowLeft,
-  Printer, AlertTriangle, Info, Clock, TrendingUp, Layers, BarChart3, Undo2
+  Printer, AlertTriangle, Info, Clock, TrendingUp, Layers, BarChart3, Undo2, Activity
 } from 'lucide-react';
 
 interface Line {
@@ -63,6 +62,12 @@ interface PalletKioskProps {
   onSwitchToUnit: () => void;
 }
 
+/* ─── Panel message type ─── */
+interface PanelMessage {
+  text: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+}
+
 /* ─────────────── Panel wrapper component ─────────────── */
 function Panel({ title, icon, children, className = '', headerRight }: {
   title: string;
@@ -96,6 +101,22 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
   const [summary, setSummary] = useState<PalletSummary | null>(null);
   const [unitsCount, setUnitsCount] = useState<number>(0);
   const [showTicket, setShowTicket] = useState<Pallet | null>(null);
+
+  // Panel message state (replaces toast)
+  const [panelMessage, setPanelMessage] = useState<PanelMessage | null>(null);
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const showMessage = useCallback((text: string, type: PanelMessage['type'] = 'info') => {
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
+    setPanelMessage({ text, type });
+    messageTimerRef.current = setTimeout(() => {
+      setPanelMessage(null);
+      messageTimerRef.current = null;
+    }, 3000);
+  }, []);
 
   const selectedLine = useMemo(() => lines.find(l => l.id === lineId) || null, [lines, lineId]);
   const palletScaleUrl = selectedLine?.pallet_scale_url || selectedLine?.scale_url || null;
@@ -176,11 +197,11 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     if (!activeTaskId) return;
     const weight = sensor.weight.value || 0;
     if (!weight) {
-      toast({ title: 'Poids invalide', description: 'Aucun poids détecté sur la balance palettes.', variant: 'destructive' });
+      showMessage('Aucun poids détecté sur la balance palettes', 'error');
       return;
     }
     if (!unitsCount || unitsCount <= 0) {
-      toast({ title: 'Quantité invalide', description: 'Indiquez le nombre d\'unités dans la palette.', variant: 'destructive' });
+      showMessage("Indiquez le nombre d'unités dans la palette", 'error');
       return;
     }
     try {
@@ -192,7 +213,7 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
       });
       await loadPallets(activeTaskId);
       const label = conformityStatus === 'conforme' ? 'Conforme' : 'Non conforme';
-      toast({ title: `Palette ${label}`, description: `Poids: ${weight.toFixed(3)} — ${unitsCount} unités` });
+      showMessage(`Palette ${label} — ${weight.toFixed(3)} kg — ${unitsCount} unités`, conformityStatus === 'conforme' ? 'success' : 'warning');
       if (result && (result as any).id) {
         try {
           const ticket = await apiClient.getPalletTicket((result as any).id);
@@ -200,19 +221,21 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
         } catch {}
       }
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || "Impossible d'enregistrer la palette", variant: 'destructive' });
+      showMessage(e?.message || "Impossible d'enregistrer la palette", 'error');
     }
   };
 
-  // Delete last pallet
+  // Delete last pallet (with confirmation)
   const deleteLastPallet = async () => {
     if (!activeTaskId || pallets.length === 0) return;
     try {
       await apiClient.deleteLastPallet(activeTaskId);
       await loadPallets(activeTaskId);
-      toast({ title: 'Palette supprimée', description: 'La dernière palette a été supprimée.' });
+      setShowDeleteConfirm(false);
+      showMessage('Dernière palette supprimée', 'info');
     } catch (e: any) {
-      toast({ title: 'Erreur', description: e?.message || 'Impossible de supprimer la palette', variant: 'destructive' });
+      setShowDeleteConfirm(false);
+      showMessage(e?.message || 'Impossible de supprimer la palette', 'error');
     }
   };
 
@@ -262,7 +285,9 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
           <p>Weight Stream — NETPROCESS</p>
           <p>https://netprocess.ma</p>
         </div>
-        <script>window.onload = function() { window.print(); }</script>
+        <script>
+          window.onload = function() { window.print(); };
+        </script>
       </body>
       </html>
     `);
@@ -296,6 +321,21 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     if (w > activeTask.pallet_tolerance_max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20' };
     return { label: 'Dans la tolérance', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-400/40', icon: '●', glow: 'shadow-emerald-500/20' };
   }, [sensor.weight.value, activeTask?.pallet_target_weight, activeTask?.pallet_tolerance_min, activeTask?.pallet_tolerance_max]);
+
+  // === Message styling ===
+  const messageStyles: Record<PanelMessage['type'], string> = {
+    success: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
+    error: 'bg-rose-500/20 border-rose-500/40 text-rose-300',
+    warning: 'bg-amber-500/20 border-amber-500/40 text-amber-300',
+    info: 'bg-sky-500/20 border-sky-500/40 text-sky-300',
+  };
+
+  const messageIcons: Record<PanelMessage['type'], React.ReactNode> = {
+    success: <CheckCircle className="w-4 h-4" />,
+    error: <XCircle className="w-4 h-4" />,
+    warning: <AlertTriangle className="w-4 h-4" />,
+    info: <Activity className="w-4 h-4" />,
+  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-3">
@@ -357,7 +397,7 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
         )}
       </div>
 
-      {/* === MAIN ROW: 3 columns with panels === */}
+      {/* === MAIN ROW: 2 columns with panels === */}
       <div className="flex-1 flex gap-3 min-h-0">
 
         {/* ═══════ LEFT COLUMN: Rapprochement + Statistiques ═══════ */}
@@ -453,6 +493,14 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
             <div className={`absolute w-64 h-64 rounded-full blur-[100px] opacity-20 transition-colors duration-500 ${
               isStable ? 'bg-violet-500' : isUnstable ? 'bg-amber-500' : isError ? 'bg-red-500' : 'bg-slate-700'
             }`} />
+
+            {/* ── Message temporaire dans le panel ── */}
+            {panelMessage && (
+              <div className={`absolute top-3 left-4 right-4 z-20 flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-semibold transition-all duration-300 animate-in fade-in slide-in-from-top-2 ${messageStyles[panelMessage.type]}`}>
+                {messageIcons[panelMessage.type]}
+                <span>{panelMessage.text}</span>
+              </div>
+            )}
 
             {/* Weight value */}
             <div className={`relative z-10 text-6xl sm:text-7xl md:text-8xl font-bold font-mono leading-none tracking-tighter transition-all duration-300 ${weightColor} ${isUnstable ? 'animate-pulse' : ''}`}>
@@ -556,7 +604,7 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
           <div className="flex items-center gap-2">
             {pallets.length > 0 && activeTask && (
               <button
-                onClick={deleteLastPallet}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
               >
                 <Undo2 className="w-3.5 h-3.5" />
@@ -607,6 +655,42 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
           </div>
         )}
       </Panel>
+
+      {/* ===== CONFIRMATION SUPPRESSION PALETTE MODAL ===== */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-[#141b2d] rounded-3xl border border-white/[0.08] p-8 w-full max-w-sm space-y-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-2xl bg-rose-500/10 flex items-center justify-center mx-auto mb-3">
+                <AlertTriangle className="w-7 h-7 text-rose-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Confirmer la suppression</h2>
+              <p className="text-sm text-slate-400 mt-2">
+                Voulez-vous supprimer la dernière palette
+                {pallets.length > 0 && (
+                  <span className="font-mono font-bold text-white"> (P{pallets[0]?.pallet_number} — {Number(pallets[0]?.weight).toFixed(3)} kg)</span>
+                )}
+                ?
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Cette action est irréversible.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 h-14 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 text-base font-medium hover:bg-white/[0.08] active:scale-[0.97] transition-all touch-manipulation"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={deleteLastPallet}
+                className="flex-1 h-14 rounded-xl bg-rose-600 border border-rose-500/30 text-white text-base font-semibold hover:bg-rose-500 active:scale-[0.97] transition-all touch-manipulation shadow-lg shadow-rose-900/30"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* === TICKET MODAL === */}
       {showTicket && (
