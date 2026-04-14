@@ -515,9 +515,9 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
             {pallets.length > 0 && activeTask && (
               <button
                 onClick={deleteLastPallet}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-[10px] font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
               >
-                <Undo2 className="w-3 h-3" />
+                <Undo2 className="w-3.5 h-3.5" />
                 Supprimer dernière
               </button>
             )}

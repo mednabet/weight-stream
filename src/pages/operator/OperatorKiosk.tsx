@@ -477,29 +477,29 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
             <div className="w-52 sm:w-60 md:w-64 flex flex-col gap-2">
               {/* Task controls */}
               {isTaskActive && activeTask && (
-                <div className="flex gap-1.5">
+                <div className="flex gap-2">
                   {activeTask.status !== 'in_progress' ? (
                     <button
                       onClick={() => setStatus('in_progress')}
-                      className="flex-1 h-12 flex items-center justify-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 text-sm font-semibold hover:bg-emerald-500/25 active:scale-[0.97] transition-all touch-manipulation"
+                      className="flex-1 h-16 flex items-center justify-center gap-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 text-base font-bold hover:bg-emerald-500/25 active:scale-[0.97] transition-all touch-manipulation"
                     >
-                      <Play className="w-4 h-4" />
+                      <Play className="w-5 h-5" />
                       Démarrer
                     </button>
                   ) : (
                     <button
                       onClick={() => setStatus('paused')}
-                      className="flex-1 h-10 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 text-xs font-semibold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                      className="flex-1 h-16 flex items-center justify-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
                     >
-                      <Pause className="w-3.5 h-3.5" />
+                      <Pause className="w-5 h-5" />
                       Pause
                     </button>
                   )}
                   <button
                     onClick={() => setStatus('completed')}
-                    className="h-10 px-3 flex items-center justify-center gap-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08] text-slate-400 text-xs font-medium hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97] transition-all touch-manipulation"
+                    className="h-16 px-5 flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-slate-400 text-base font-semibold hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97] transition-all touch-manipulation"
                   >
-                    <Square className="w-3.5 h-3.5" />
+                    <Square className="w-5 h-5" />
                     Fin
                   </button>
                 </div>
@@ -526,25 +526,25 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                   </button>
                 </>
               ) : !isTaskActive ? (
-                <div className="flex-1 flex flex-col items-center justify-center gap-4 rounded-2xl bg-white/[0.02] border border-dashed border-white/10">
-                  <div className="w-14 h-14 rounded-2xl bg-white/[0.04] flex items-center justify-center">
-                    <Scale className="w-7 h-7 text-slate-600" />
+                <div className="flex-1 flex flex-col items-center justify-center gap-5 rounded-2xl bg-white/[0.02] border border-dashed border-white/10">
+                  <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center">
+                    <Scale className="w-8 h-8 text-slate-600" />
                   </div>
-                  <span className="text-sm text-slate-500 text-center px-4">Aucune tâche active</span>
-                  <div className="flex flex-col gap-2">
+                  <span className="text-base text-slate-500 text-center px-4 font-medium">Aucune tâche active</span>
+                  <div className="flex flex-col gap-3 w-full px-6">
                     <button
                       onClick={() => setShowCreateTask(!showCreateTask)}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-sm font-semibold hover:bg-indigo-500/25 active:scale-[0.97] transition-all touch-manipulation"
+                      className="flex items-center justify-center gap-3 w-full h-14 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-base font-bold hover:bg-indigo-500/25 active:scale-[0.97] transition-all touch-manipulation"
                     >
-                      <PlusCircle className="w-4 h-4" />
+                      <PlusCircle className="w-5 h-5" />
                       Nouvelle tâche
                     </button>
                     {lastCompletedTask && (
                       <button
                         onClick={reopenLastTask}
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-semibold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                        className="flex items-center justify-center gap-3 w-full h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-base font-bold hover:bg-amber-500/20 active:scale-[0.97] transition-all touch-manipulation"
                       >
-                        <RotateCcw className="w-4 h-4" />
+                        <RotateCcw className="w-5 h-5" />
                         Réouvrir dernière tâche
                       </button>
                     )}
@@ -584,9 +584,9 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                 {recentItems.length > 0 && isTaskActive && (
                   <button
                     onClick={deleteLastItem}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-[10px] font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/15 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 active:scale-[0.97] transition-all touch-manipulation"
                   >
-                    <Undo2 className="w-3 h-3" />
+                    <Undo2 className="w-3.5 h-3.5" />
                     Supprimer dernier
                   </button>
                 )}
