@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { useSensorData } from '@/hooks/useSensorData';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import {
   CheckCircle, XCircle, Scale, Package, ArrowLeft,
-  Printer, AlertTriangle, Info
+  Printer, AlertTriangle, Info, Clock, TrendingUp, Layers, BarChart3
 } from 'lucide-react';
 
 interface Line {
@@ -81,7 +80,6 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
   const defaultUnitsPerPallet = activeTask?.units_per_pallet || 30;
 
-  // Auto-set units count to default
   useEffect(() => {
     if (defaultUnitsPerPallet && unitsCount === 0) {
       setUnitsCount(defaultUnitsPerPallet);
@@ -93,7 +91,6 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     const data = await apiClient.getTasksForLine(lineId);
     setTasks(data as any);
     const allTasks = data as any[];
-    // Chercher les tâches in_progress ou paused (pour le conditionnement)
     const inProgress = allTasks.find(t => t.status === 'in_progress');
     const paused = allTasks.find(t => t.status === 'paused');
     const completed = allTasks.filter(t => t.status === 'completed').sort((a, b) =>
@@ -104,7 +101,6 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     } else if (paused) {
       setActiveTaskId(paused.id);
     } else if (completed.length > 0) {
-      // Permettre de conditionner même une tâche terminée
       setActiveTaskId(completed[0].id);
     } else {
       setActiveTaskId('');
@@ -119,7 +115,6 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
         apiClient.getPalletSummary(taskId),
       ]);
       setPallets((palletsData as any[]).reverse());
-      // Map API nested structure to flat PalletSummary
       const sd = summaryData as any;
       setSummary({
         total_pallets: sd.conditioning?.total_pallets || 0,
@@ -174,7 +169,6 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
       await loadPallets(activeTaskId);
       const label = conformityStatus === 'conforme' ? 'Conforme' : 'Non conforme';
       toast({ title: `Palette ${label}`, description: `Poids: ${weight.toFixed(3)} — ${unitsCount} unités` });
-      // Afficher le ticket automatiquement
       if (result && (result as any).id) {
         try {
           const ticket = await apiClient.getPalletTicket((result as any).id);
@@ -229,7 +223,8 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
         <div class="divider"></div>
         <div class="row"><span class="label">Opérateur:</span><span>${pallet.operator_name || user?.name || '-'}</span></div>
         <div class="footer">
-          <p>Weight Stream — Production Manager</p>
+          <p>Weight Stream — NETPROCESS</p>
+          <p>https://netprocess.ma</p>
         </div>
         <script>window.onload = function() { window.print(); }</script>
       </body>
@@ -238,300 +233,366 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     ticketWindow.document.close();
   };
 
-  // Weight status colors
-  const weightColor = sensor.weight.status === 'stable' ? 'text-green-400' :
-    sensor.weight.status === 'unstable' ? 'text-orange-400' :
-    sensor.weight.status === 'error' ? 'text-red-400' : 'text-gray-500';
+  // === Weight status styling ===
+  const sensorStatus = sensor.weight.status;
+  const isStable = sensorStatus === 'stable';
+  const isUnstable = sensorStatus === 'unstable';
+  const isError = sensorStatus === 'error';
 
-  const weightBorderColor = sensor.weight.status === 'stable' ? 'border-green-500/60 bg-green-500/5' :
-    sensor.weight.status === 'unstable' ? 'border-orange-500/60 bg-orange-500/5' :
-    sensor.weight.status === 'error' ? 'border-red-500/60 bg-red-500/5' : 'border-border';
+  const weightColor = isStable ? 'text-violet-400' :
+    isUnstable ? 'text-amber-400' :
+    isError ? 'text-red-400' : 'text-slate-500';
 
-  const badgeColor = sensor.weight.status === 'stable' ? 'bg-green-600 text-white' :
-    sensor.weight.status === 'unstable' ? 'bg-orange-500 text-white animate-pulse' :
-    sensor.weight.status === 'error' ? 'bg-red-600 text-white' : 'bg-gray-600 text-white';
+  const statusDotColor = isStable ? 'bg-violet-400' :
+    isUnstable ? 'bg-amber-400' :
+    isError ? 'bg-red-400' : 'bg-slate-500';
 
-  const badgeLabel = sensor.weight.status === 'stable' ? 'Stable' :
-    sensor.weight.status === 'unstable' ? 'Instable' :
-    sensor.weight.status === 'error' ? 'Erreur' : 'Hors ligne';
+  const statusLabel = isStable ? 'Stable' :
+    isUnstable ? 'Instable' :
+    isError ? 'Erreur' : 'Hors ligne';
 
-  // === Indicateur automatique de l'état du poids palette par rapport aux tolérances ===
+  // === Pallet weight state indicator ===
   const palletWeightState = useMemo(() => {
     if (!activeTask?.pallet_target_weight || !activeTask?.pallet_tolerance_min || !activeTask?.pallet_tolerance_max) return null;
     const w = sensor.weight.value;
     if (w === 0) return null;
-    if (w < activeTask.pallet_tolerance_min) return { label: 'Sous-poids', color: 'text-blue-400', bg: 'bg-blue-500/20 border-blue-500/50', icon: '▼' };
-    if (w > activeTask.pallet_tolerance_max) return { label: 'Surpoids', color: 'text-red-400', bg: 'bg-red-500/20 border-red-500/50', icon: '▲' };
-    return { label: 'Dans la tolérance', color: 'text-green-400', bg: 'bg-green-500/20 border-green-500/50', icon: '●' };
+    if (w < activeTask.pallet_tolerance_min) return { label: 'Sous-poids', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-400/40', icon: '▼', glow: 'shadow-sky-500/20' };
+    if (w > activeTask.pallet_tolerance_max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20' };
+    return { label: 'Dans la tolérance', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-400/40', icon: '●', glow: 'shadow-emerald-500/20' };
   }, [sensor.weight.value, activeTask?.pallet_target_weight, activeTask?.pallet_tolerance_min, activeTask?.pallet_tolerance_max]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
+    <div className="flex-1 flex flex-col min-h-0 p-3 gap-3">
 
-      {/* === TOP BAR: Back button + Task info + Rapprochement === */}
-      <div className="flex-shrink-0 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Button
+      {/* === TOP BAR === */}
+      <div className="flex-shrink-0 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button
             onClick={onSwitchToUnit}
-            variant="outline"
-            size="sm"
-            className="h-9 touch-manipulation"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-400 text-xs font-medium hover:bg-white/[0.08] hover:text-slate-200 active:scale-[0.97] transition-all touch-manipulation"
           >
-            <ArrowLeft className="w-4 h-4 mr-1" />
+            <ArrowLeft className="w-3.5 h-3.5" />
             Pesage unitaire
-          </Button>
+          </button>
 
           {activeTask && (
             <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-purple-400" />
-              <span className="text-sm font-medium truncate max-w-[200px]">
-                {activeTask.product_name} ({activeTask.product_reference})
-              </span>
-              <Badge className="bg-purple-600 text-white text-xs">Palettes</Badge>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/15">
+                <Package className="w-3.5 h-3.5 text-violet-400" />
+                <span className="text-xs font-medium text-slate-300 truncate max-w-[180px]">
+                  {activeTask.product_name}
+                </span>
+                {activeTask.product_reference && (
+                  <span className="text-[10px] text-slate-500 font-mono">{activeTask.product_reference}</span>
+                )}
+              </div>
+              <div className="px-2.5 py-1 rounded-lg bg-violet-500/15 text-[11px] font-semibold text-violet-400">
+                Palettes
+              </div>
             </div>
           )}
         </div>
 
-        {/* Rapprochement summary */}
+        {/* Rapprochement summary inline */}
         {summary && (
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1">
-              <span className="text-muted-foreground">Produit:</span>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/[0.06] border border-blue-500/10">
+              <span className="text-slate-500">Produit:</span>
               <span className="font-mono font-bold text-blue-400">{summary.total_conformes_produced}</span>
-              <span className="text-muted-foreground">conformes</span>
+              <span className="text-slate-500">conf.</span>
             </div>
-            <span className="text-muted-foreground">|</span>
-            <div className="flex items-center gap-1">
-              <span className="text-muted-foreground">Conditionné:</span>
-              <span className="font-mono font-bold text-purple-400">{summary.total_units_packed}</span>
-              <span className="text-muted-foreground">unités</span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/[0.06] border border-violet-500/10">
+              <span className="text-slate-500">Conditionné:</span>
+              <span className="font-mono font-bold text-violet-400">{summary.total_units_packed}</span>
+              <span className="text-slate-500">u</span>
             </div>
-            <span className="text-muted-foreground">|</span>
-            <div className="flex items-center gap-1">
-              <span className="text-muted-foreground">Reste:</span>
-              <span className={`font-mono font-bold ${summary.remaining_units > 0 ? 'text-yellow-400' : summary.remaining_units === 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {summary.remaining_units}
-              </span>
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
+              summary.remaining_units === 0 ? 'bg-emerald-500/[0.06] border-emerald-500/10' :
+              summary.remaining_units > 0 ? 'bg-amber-500/[0.06] border-amber-500/10' :
+              'bg-rose-500/[0.06] border-rose-500/10'
+            }`}>
+              <span className="text-slate-500">Reste:</span>
+              <span className={`font-mono font-bold ${
+                summary.remaining_units === 0 ? 'text-emerald-400' :
+                summary.remaining_units > 0 ? 'text-amber-400' : 'text-rose-400'
+              }`}>{summary.remaining_units}</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* === MAIN: Weight + Action Buttons === */}
-      <div className="flex-1 flex gap-2 min-h-0">
+      {/* === MAIN ROW: Rapprochement + Weight + Actions === */}
+      <div className="flex-1 flex gap-3 min-h-0">
 
-        {/* LEFT: Weight Display */}
-        <div className={`flex-1 rounded-xl border-2 p-2 flex flex-col items-center justify-center transition-all duration-300 ${weightBorderColor}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <Scale className={`w-5 h-5 ${weightColor}`} />
-            <span className="text-sm text-muted-foreground">Poids palette</span>
-            <Badge className={`${badgeColor} text-xs`}>{badgeLabel}</Badge>
+        {/* === LEFT: Rapprochement === */}
+        <div className="w-48 flex flex-col gap-2">
+          {summary ? (
+            <>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-3 flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-[11px] text-slate-400 font-medium">Rapprochement</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="rounded-xl bg-blue-500/[0.08] border border-blue-500/10 p-2 text-center">
+                    <div className="text-xl font-bold text-blue-400 font-mono">{summary.total_conformes_produced}</div>
+                    <div className="text-[9px] text-blue-400/60 mt-0.5">Produits conf.</div>
+                  </div>
+                  <div className="rounded-xl bg-violet-500/[0.08] border border-violet-500/10 p-2 text-center">
+                    <div className="text-xl font-bold text-violet-400 font-mono">{summary.total_units_packed}</div>
+                    <div className="text-[9px] text-violet-400/60 mt-0.5">Conditionnés</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <div className="rounded-xl bg-emerald-500/[0.08] border border-emerald-500/10 px-3 py-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-[11px] text-emerald-400/80">Palettes OK</span>
+                  </div>
+                  <span className="text-lg font-bold text-emerald-400 font-mono">{summary.total_conformes}</span>
+                </div>
+                <div className="rounded-xl bg-rose-500/[0.08] border border-rose-500/10 px-3 py-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="text-[11px] text-rose-400/80">Palettes NOK</span>
+                  </div>
+                  <span className="text-lg font-bold text-rose-400 font-mono">{summary.total_non_conformes}</span>
+                </div>
+                <div className={`rounded-xl border px-3 py-2 flex items-center justify-between ${
+                  summary.remaining_units === 0 ? 'bg-emerald-500/[0.08] border-emerald-500/10' :
+                  summary.remaining_units > 0 ? 'bg-amber-500/[0.08] border-amber-500/10' :
+                  'bg-rose-500/[0.08] border-rose-500/10'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-[11px] text-slate-400">Reste</span>
+                  </div>
+                  <span className={`text-lg font-bold font-mono ${
+                    summary.remaining_units === 0 ? 'text-emerald-400' :
+                    summary.remaining_units > 0 ? 'text-amber-400' : 'text-rose-400'
+                  }`}>{summary.remaining_units}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4 flex flex-col items-center justify-center flex-1">
+              <BarChart3 className="w-8 h-8 text-slate-600 mb-2" />
+              <span className="text-[11px] text-slate-500 text-center">Aucune donnée</span>
+            </div>
+          )}
+        </div>
+
+        {/* === CENTER: Weight Display === */}
+        <div className="flex-1 rounded-2xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/[0.06] flex flex-col items-center justify-center relative overflow-hidden">
+          {/* Glow effect */}
+          <div className={`absolute w-64 h-64 rounded-full blur-[100px] opacity-20 transition-colors duration-500 ${
+            isStable ? 'bg-violet-500' : isUnstable ? 'bg-amber-500' : isError ? 'bg-red-500' : 'bg-slate-700'
+          }`} />
+
+          {/* Status indicator */}
+          <div className="flex items-center gap-2 mb-3 relative z-10">
+            <div className={`w-2 h-2 rounded-full ${statusDotColor} ${isUnstable ? 'animate-pulse' : ''}`} />
+            <span className="text-xs text-slate-400 font-medium tracking-wide uppercase">{statusLabel}</span>
+            <span className="text-[10px] text-violet-400/60 font-medium ml-1">PALETTE</span>
           </div>
 
-          <div className={`text-5xl sm:text-6xl md:text-7xl font-bold font-mono leading-none tracking-tight transition-colors duration-300 ${weightColor} ${sensor.weight.status === 'unstable' ? 'animate-pulse' : ''}`}>
+          {/* Weight value */}
+          <div className={`relative z-10 text-6xl sm:text-7xl md:text-8xl font-bold font-mono leading-none tracking-tighter transition-all duration-300 ${weightColor} ${isUnstable ? 'animate-pulse' : ''}`}>
             {sensor.weight.value.toFixed(3)}
           </div>
+          <span className="text-sm text-slate-500 font-medium mt-1 relative z-10">kg</span>
 
-          {/* Pallet target info */}
+          {/* Tolerance info */}
           {activeTask?.pallet_target_weight && (
-            <div className="mt-1 text-sm text-muted-foreground">
-              Cible palette: <span className="font-mono font-medium text-foreground">{activeTask.pallet_target_weight}</span>
+            <div className="mt-3 flex items-center gap-3 relative z-10">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                <TrendingUp className="w-3 h-3 text-slate-500" />
+                <span className="text-[11px] text-slate-400">Cible</span>
+                <span className="text-[11px] font-mono font-semibold text-slate-200">{activeTask.pallet_target_weight}</span>
+              </div>
               {activeTask.pallet_tolerance_min && (
-                <>
-                  <span className="mx-1">|</span>
-                  Min: <span className="font-mono">{activeTask.pallet_tolerance_min}</span>
-                  <span className="mx-1">—</span>
-                  Max: <span className="font-mono">{activeTask.pallet_tolerance_max}</span>
-                </>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                  <span className="text-[11px] text-slate-500">Min</span>
+                  <span className="text-[11px] font-mono text-slate-300">{activeTask.pallet_tolerance_min}</span>
+                  <span className="text-[11px] text-slate-600 mx-0.5">—</span>
+                  <span className="text-[11px] text-slate-500">Max</span>
+                  <span className="text-[11px] font-mono text-slate-300">{activeTask.pallet_tolerance_max}</span>
+                </div>
               )}
             </div>
           )}
 
+          {/* Weight state badge */}
           {palletWeightState && (
-            <div className={`mt-1 px-4 py-1 rounded-lg border text-sm font-semibold ${palletWeightState.bg} ${palletWeightState.color}`}>
-              {palletWeightState.icon} {palletWeightState.label}
+            <div className={`mt-3 px-5 py-2 rounded-xl border text-sm font-bold relative z-10 shadow-lg transition-all duration-300 ${palletWeightState.bg} ${palletWeightState.color} ${palletWeightState.glow}`}>
+              <span className="mr-1.5">{palletWeightState.icon}</span>
+              {palletWeightState.label}
             </div>
           )}
 
           {/* Units count input */}
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Unités dans la palette:</span>
-            <Input
-              type="number"
-              value={unitsCount}
-              onChange={(e) => setUnitsCount(parseInt(e.target.value || '0', 10))}
-              className="w-24 h-10 text-center text-lg font-mono touch-manipulation"
-              inputMode="numeric"
-              min={1}
-            />
+          <div className="mt-4 flex items-center gap-3 relative z-10">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+              <Layers className="w-3.5 h-3.5 text-violet-400" />
+              <span className="text-[11px] text-slate-400">Unités</span>
+              <Input
+                type="number"
+                value={unitsCount}
+                onChange={(e) => setUnitsCount(parseInt(e.target.value || '0', 10))}
+                className="w-20 h-9 text-center text-lg font-mono font-bold bg-white/[0.04] border-white/[0.08] touch-manipulation"
+                inputMode="numeric"
+                min={1}
+              />
+            </div>
           </div>
 
-          {sensor.weight.status === 'unstable' && (
-            <div className="mt-2 text-sm text-orange-400 font-medium animate-pulse">
-              Stabilisation en cours...
+          {/* Unstable warning */}
+          {isUnstable && (
+            <div className="mt-3 flex items-center gap-2 text-amber-400/80 animate-pulse relative z-10">
+              <Clock className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">Stabilisation en cours...</span>
             </div>
           )}
         </div>
 
-        {/* RIGHT: Action buttons */}
-        <div className="w-48 sm:w-56 md:w-64 flex flex-col gap-2">
+        {/* === RIGHT: Action Buttons === */}
+        <div className="w-52 sm:w-60 md:w-64 flex flex-col gap-2">
           {activeTask ? (
             <>
-              <Button
+              <button
                 onClick={() => confirmPallet('conforme')}
-                disabled={sensor.weight.status !== 'stable'}
-                className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-green-600 hover:bg-green-500 active:bg-green-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
+                disabled={!isStable}
+                className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
               >
-                <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
-                Conforme
-              </Button>
-              <Button
+                <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12" />
+                <span className="text-xl sm:text-2xl font-bold tracking-tight">Conforme</span>
+              </button>
+              <button
                 onClick={() => confirmPallet('non_conforme')}
-                disabled={sensor.weight.status !== 'stable'}
-                className="flex-1 min-h-[80px] text-xl sm:text-2xl font-bold bg-red-600 hover:bg-red-500 active:bg-red-700 text-white disabled:opacity-30 rounded-xl touch-manipulation transition-all duration-150 active:scale-95"
+                disabled={!isStable}
+                className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
               >
-                <XCircle className="w-7 h-7 sm:w-8 sm:h-8 mr-2 flex-shrink-0" />
-                Non conforme
-              </Button>
+                <XCircle className="w-10 h-10 sm:w-12 sm:h-12" />
+                <span className="text-xl sm:text-2xl font-bold tracking-tight">Non conforme</span>
+              </button>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center text-sm text-muted-foreground px-2">
-                <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-500" />
-                Aucune tâche active.<br />
-                Revenez au pesage unitaire pour créer une tâche.
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 rounded-2xl bg-white/[0.02] border border-dashed border-white/10">
+              <div className="w-14 h-14 rounded-2xl bg-white/[0.04] flex items-center justify-center">
+                <AlertTriangle className="w-7 h-7 text-amber-500/50" />
               </div>
+              <span className="text-sm text-slate-500 text-center px-4">
+                Aucune tâche active.<br />
+                Revenez au pesage unitaire.
+              </span>
             </div>
           )}
         </div>
       </div>
 
-      {/* === BOTTOM: Rapprochement + Recent pallets === */}
-      <div className="flex-shrink-0 flex gap-2 h-40 sm:h-44">
-
-        {/* Rapprochement card */}
-        <div className="w-56 sm:w-64 md:w-72 rounded-xl border border-border bg-card p-3 flex flex-col justify-center">
-          {summary ? (
-            <>
-              <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-                <Info className="w-3 h-3" /> Rapprochement
-              </div>
-              <div className="grid grid-cols-2 gap-1.5 text-center mb-2">
-                <div className="rounded-lg bg-blue-600/10 py-1.5">
-                  <div className="text-xl font-bold text-blue-400">{summary.total_conformes_produced}</div>
-                  <div className="text-[10px] text-blue-400/70">Produits conformes</div>
-                </div>
-                <div className="rounded-lg bg-purple-600/10 py-1.5">
-                  <div className="text-xl font-bold text-purple-400">{summary.total_units_packed}</div>
-                  <div className="text-[10px] text-purple-400/70">Unités conditionnées</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-1 text-center">
-                <div className="rounded bg-green-600/10 py-1">
-                  <div className="text-sm font-bold text-green-400">{summary.total_conformes}</div>
-                  <div className="text-[9px] text-green-400/70">Palettes OK</div>
-                </div>
-                <div className="rounded bg-red-600/10 py-1">
-                  <div className="text-sm font-bold text-red-400">{summary.total_non_conformes}</div>
-                  <div className="text-[9px] text-red-400/70">Palettes NOK</div>
-                </div>
-                <div className={`rounded py-1 ${summary.remaining_units === 0 ? 'bg-green-600/10' : summary.remaining_units > 0 ? 'bg-yellow-600/10' : 'bg-red-600/10'}`}>
-                  <div className={`text-sm font-bold ${summary.remaining_units === 0 ? 'text-green-400' : summary.remaining_units > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
-                    {summary.remaining_units}
-                  </div>
-                  <div className="text-[9px] text-muted-foreground">Reste</div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="text-xs text-muted-foreground text-center">Aucune donnée de conditionnement</div>
+      {/* === BOTTOM: Recent pallets === */}
+      <div className="flex-shrink-0 h-28 sm:h-32 rounded-2xl bg-white/[0.02] border border-white/[0.06] overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.04]">
+          <div className="flex items-center gap-2">
+            <Package className="w-3.5 h-3.5 text-violet-400/60" />
+            <span className="text-xs text-slate-400 font-medium">Dernières palettes</span>
+          </div>
+          {pallets.length > 0 && (
+            <span className="text-[10px] text-slate-500 font-mono">{pallets.length} total</span>
           )}
         </div>
-
-        {/* Recent pallets list */}
-        <div className="flex-1 rounded-xl border border-border bg-card p-2 overflow-hidden">
-          <div className="text-xs text-muted-foreground mb-1.5 px-1 font-medium">Dernières palettes</div>
-          {pallets.length > 0 ? (
-            <div className="flex flex-col gap-1 overflow-y-auto h-[calc(100%-24px)] pr-1">
-              {pallets.slice(0, 15).map((pallet) => (
-                <div key={pallet.id} className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs ${
-                  pallet.status === 'conforme' ? 'border-green-600/20 bg-green-600/5' : 'border-red-600/20 bg-red-600/5'
+        {pallets.length > 0 ? (
+          <div className="flex gap-1.5 overflow-x-auto px-3 py-2 h-[calc(100%-36px)]">
+            {pallets.slice(0, 20).map((pallet) => (
+              <div
+                key={pallet.id}
+                className={`flex-shrink-0 w-28 rounded-xl border px-2.5 py-2 flex flex-col items-center justify-center transition-all cursor-pointer hover:scale-[1.02] ${
+                  pallet.status === 'conforme'
+                    ? 'border-emerald-500/15 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]'
+                    : 'border-rose-500/15 bg-rose-500/[0.04] hover:bg-rose-500/[0.08]'
+                }`}
+                onClick={() => printTicket(pallet)}
+              >
+                <div className="flex items-center gap-1 mb-0.5">
+                  <span className="text-[9px] text-slate-500 font-mono">P{pallet.pallet_number}</span>
+                  <span className="text-[9px] text-slate-600">{pallet.units_count}u</span>
+                </div>
+                <span className={`text-sm font-bold font-mono ${
+                  pallet.status === 'conforme' ? 'text-emerald-400' : 'text-rose-400'
                 }`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground w-6">P{pallet.pallet_number}</span>
-                    <span className="font-mono font-medium text-sm">{Number(pallet.weight).toFixed(3)}</span>
-                    <span className="text-[10px] text-muted-foreground">{pallet.units_count}u</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[10px] font-medium ${
-                      pallet.status === 'conforme' ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      {pallet.status === 'conforme' ? 'OK' : 'NOK'}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="w-6 h-6 touch-manipulation"
-                      onClick={() => printTicket(pallet)}
-                    >
-                      <Printer className="w-3 h-3" />
-                    </Button>
-                  </div>
+                  {Number(pallet.weight).toFixed(3)}
+                </span>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className={`text-[9px] font-semibold ${
+                    pallet.status === 'conforme' ? 'text-emerald-500/60' : 'text-rose-500/60'
+                  }`}>
+                    {pallet.status === 'conforme' ? 'OK' : 'NOK'}
+                  </span>
+                  <Printer className="w-2.5 h-2.5 text-slate-600" />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-xs text-muted-foreground text-center py-4">Aucune palette enregistrée</div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-[calc(100%-36px)]">
+            <span className="text-xs text-slate-600">Aucune palette enregistrée</span>
+          </div>
+        )}
       </div>
 
       {/* === TICKET MODAL === */}
       {showTicket && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowTicket(null)}>
-          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-sm space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowTicket(null)}>
+          <div className="bg-[#141b2d] rounded-3xl border border-white/[0.08] p-8 w-full max-w-sm space-y-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="text-center">
-              <Package className="w-10 h-10 mx-auto text-purple-400 mb-2" />
-              <h2 className="text-xl font-bold">Palette enregistrée</h2>
-              <p className="text-sm text-muted-foreground">{showTicket.ticket_number}</p>
+              <div className="w-14 h-14 rounded-2xl bg-violet-500/10 flex items-center justify-center mx-auto mb-3">
+                <Package className="w-7 h-7 text-violet-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Palette enregistrée</h2>
+              <p className="text-sm text-slate-500 mt-1 font-mono">{showTicket.ticket_number}</p>
             </div>
 
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Palette N°</span>
-                <span className="font-bold">{showTicket.pallet_number}</span>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center px-3 py-2 rounded-xl bg-white/[0.03]">
+                <span className="text-sm text-slate-400">Palette N°</span>
+                <span className="text-sm font-bold text-white">{showTicket.pallet_number}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Unités</span>
-                <span className="font-bold">{showTicket.units_count}</span>
+              <div className="flex justify-between items-center px-3 py-2 rounded-xl bg-white/[0.03]">
+                <span className="text-sm text-slate-400">Unités</span>
+                <span className="text-sm font-bold text-white">{showTicket.units_count}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Poids</span>
-                <span className="font-mono font-bold text-lg">{Number(showTicket.weight).toFixed(3)}</span>
+              <div className="flex justify-between items-center px-3 py-2 rounded-xl bg-white/[0.03]">
+                <span className="text-sm text-slate-400">Poids</span>
+                <span className="text-lg font-mono font-bold text-violet-400">{Number(showTicket.weight).toFixed(3)} kg</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Statut</span>
-                <Badge className={showTicket.status === 'conforme' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}>
+              <div className="flex justify-between items-center px-3 py-2 rounded-xl bg-white/[0.03]">
+                <span className="text-sm text-slate-400">Statut</span>
+                <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                  showTicket.status === 'conforme'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/20'
+                }`}>
                   {showTicket.status === 'conforme' ? 'CONFORME' : 'NON CONFORME'}
-                </Badge>
+                </span>
               </div>
             </div>
 
             <div className="flex gap-3">
-              <Button
-                variant="outline"
+              <button
                 onClick={() => setShowTicket(null)}
-                className="flex-1 h-12 touch-manipulation"
+                className="flex-1 h-14 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 text-base font-medium hover:bg-white/[0.08] active:scale-[0.97] transition-all touch-manipulation"
               >
                 Fermer
-              </Button>
-              <Button
+              </button>
+              <button
                 onClick={() => { printTicket(showTicket); setShowTicket(null); }}
-                className="flex-1 h-12 bg-purple-600 hover:bg-purple-700 text-white touch-manipulation"
+                className="flex-1 h-14 rounded-xl bg-violet-600 border border-violet-500/30 text-white text-base font-semibold hover:bg-violet-500 active:scale-[0.97] transition-all touch-manipulation shadow-lg shadow-violet-900/30 flex items-center justify-center gap-2"
               >
-                <Printer className="w-4 h-4 mr-2" />
+                <Printer className="w-4 h-4" />
                 Imprimer
-              </Button>
+              </button>
             </div>
           </div>
         </div>
