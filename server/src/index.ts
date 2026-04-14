@@ -39,6 +39,11 @@ app.use(cors({
     if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
       return callback(null, true);
     }
+
+    // Allow manus.computer proxy domains
+    if (origin.includes('manus.computer')) {
+      return callback(null, true);
+    }
     
     // Reject all other origins
     console.warn(`[CORS] Blocked request from origin: ${origin}`);

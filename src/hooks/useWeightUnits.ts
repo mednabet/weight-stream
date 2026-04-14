@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/lib/api-client';
 import { toast } from '@/hooks/use-toast';
 
 export interface WeightUnit {
@@ -21,12 +21,7 @@ export function useWeightUnits() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase
-        .from('weight_units')
-        .select('*')
-        .order('name');
-      
-      if (fetchError) throw new Error(fetchError.message);
+      const data = await apiClient.getWeightUnits();
       setUnits(data as WeightUnit[]);
     } catch (e: any) {
       setError(e);
@@ -50,8 +45,7 @@ export function useWeightUnits() {
 
   const createUnit = async (data: Omit<WeightUnit, 'id' | 'created_at'>): Promise<boolean> => {
     try {
-      const { error } = await supabase.from('weight_units').insert(data);
-      if (error) throw new Error(error.message);
+      await apiClient.createWeightUnit(data);
       await fetchUnits();
       return true;
     } catch (e: any) {
@@ -66,8 +60,7 @@ export function useWeightUnits() {
 
   const updateUnit = async (id: string, data: Partial<WeightUnit>): Promise<boolean> => {
     try {
-      const { error } = await supabase.from('weight_units').update(data).eq('id', id);
-      if (error) throw new Error(error.message);
+      await apiClient.updateWeightUnit(id, data);
       await fetchUnits();
       return true;
     } catch (e: any) {
@@ -82,8 +75,7 @@ export function useWeightUnits() {
 
   const deleteUnit = async (id: string): Promise<boolean> => {
     try {
-      const { error } = await supabase.from('weight_units').delete().eq('id', id);
-      if (error) throw new Error(error.message);
+      await apiClient.deleteWeightUnit(id);
       await fetchUnits();
       return true;
     } catch (e: any) {
@@ -98,11 +90,8 @@ export function useWeightUnits() {
 
   const setDefaultUnit = async (id: string): Promise<boolean> => {
     try {
-      // First, unset all defaults
-      await supabase.from('weight_units').update({ is_default: false }).neq('id', id);
-      // Then set the new default
-      const { error } = await supabase.from('weight_units').update({ is_default: true }).eq('id', id);
-      if (error) throw new Error(error.message);
+      // Update the unit to be default (backend should handle unsetting others)
+      await apiClient.updateWeightUnit(id, { is_default: true });
       await fetchUnits();
       return true;
     } catch (e: any) {

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/lib/api-client';
 import { UserRole } from '@/types/production';
 
 export interface UserWithRole {
@@ -20,18 +20,14 @@ export function useUsers(filterRole?: string) {
   const { data: users = [], isLoading, error, refetch } = useQuery({
     queryKey: ['users', filterRole],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('*');
-      
-      if (error) throw new Error(error.message);
+      const data = await apiClient.getUsers();
       
       let result = (data as any[]).map((u) => ({
-        id: u.user_id,
-        email: u.user_id, // Note: We don't have access to auth.users email
+        id: u.id,
+        email: u.email,
         role: u.role as UserRole,
-        is_active: true,
-        banned: false,
+        is_active: u.is_active ?? true,
+        banned: !u.is_active,
         created_at: u.created_at,
         createdAt: u.created_at,
         lastSignIn: null,
@@ -48,11 +44,7 @@ export function useUsers(filterRole?: string) {
 
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: UserRole }) => {
-      const { error } = await supabase
-        .from('user_roles')
-        .update({ role })
-        .eq('user_id', userId);
-      if (error) throw new Error(error.message);
+      await apiClient.updateUserRole(userId, role);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -60,21 +52,32 @@ export function useUsers(filterRole?: string) {
   });
 
   const toggleUserStatus = async (userId: string, banned: boolean): Promise<boolean> => {
-    // Not available with Supabase RLS - would need edge function
-    console.warn('toggleUserStatus not available in Supabase mode');
-    return false;
+    try {
+      await apiClient.toggleUserStatus(userId, !banned);
+      await refetch();
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const deleteUser = async (userId: string): Promise<boolean> => {
-    // Not available with Supabase RLS - would need edge function
-    console.warn('deleteUser not available in Supabase mode');
-    return false;
+    try {
+      await apiClient.deleteUser(userId);
+      await refetch();
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const resetUserPassword = async (userId: string, password: string): Promise<boolean> => {
-    // Not available with Supabase RLS - would need edge function
-    console.warn('resetUserPassword not available in Supabase mode');
-    return false;
+    try {
+      await apiClient.resetUserPassword(userId, password);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const updateUserRole = async (userId: string, role: UserRole): Promise<boolean> => {

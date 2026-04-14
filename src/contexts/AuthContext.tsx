@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/lib/api-client';
 import { UserRole } from '@/types/production';
 
 interface AuthState {
@@ -18,12 +18,11 @@ interface AuthContextType extends AuthState {
 
 // Messages d'erreur d'authentification en français
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  'Email ou mot de passe incorrect': 'Identifiants incorrects. Vérifiez votre email et mot de passe.',
+  'Compte désactivé': 'Votre compte a été désactivé. Contactez votre administrateur.',
+  'Email déjà utilisé': 'Cette adresse email est déjà utilisée.',
   'Invalid login credentials': 'Identifiants incorrects. Vérifiez votre email et mot de passe.',
-  'Email already exists': 'Cette adresse email est déjà utilisée.',
-  'Invalid email': 'Adresse email invalide.',
-  'Password should be at least 6 characters': 'Le mot de passe doit contenir au moins 6 caractères.',
-  'User not found': 'Aucun compte trouvé avec cette adresse email.',
-  'Email not confirmed': 'Veuillez confirmer votre email avant de vous connecter.',
+  'Failed to fetch': 'Impossible de contacter le serveur. Vérifiez votre connexion réseau.',
 };
 
 function formatAuthError(error: any): string {
@@ -48,121 +47,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isLoading: true,
   });
 
-  const getUserRole = useCallback(async (userId: string): Promise<UserRole> => {
-    const { data, error } = await supabase.rpc('get_user_role', { _user_id: userId });
-    if (error) return 'operator';
-    return (data as UserRole) || 'operator';
-  }, []);
-
   const refreshUser = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.user) {
+      // Check if we have a stored token
+      if (!apiClient.isAuthenticated()) {
         setState(prev => ({ ...prev, user: null, role: null, isAuthenticated: false, isLoading: false }));
         return;
       }
 
-      const role = await getUserRole(session.user.id);
+      // Validate token by fetching current user
+      const result = await apiClient.getCurrentUser();
       
       setState(prev => ({
         ...prev,
-        user: { id: session.user.id, email: session.user.email || '' },
-        role,
+        user: { id: result.user.id, email: result.user.email },
+        role: result.user.role as UserRole,
         isAuthenticated: true,
         isLoading: false,
       }));
     } catch (e) {
+      // Token invalid or expired
+      apiClient.logout();
       setState(prev => ({ ...prev, user: null, role: null, isAuthenticated: false, isLoading: false }));
     }
-  }, [getUserRole]);
+  }, []);
 
   useEffect(() => {
-    // 1) Subscribe FIRST (prevents missing auth events)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session?.user) {
-        setState(prev => ({ ...prev, user: null, role: null, isAuthenticated: false, isLoading: false }));
-        return;
-      }
-
-      // Keep the callback sync (avoid deadlocks). Defer role lookup.
-      setState(prev => ({
-        ...prev,
-        user: { id: session.user.id, email: session.user.email || '' },
-        role: null,
-        isAuthenticated: true,
-        isLoading: true,
-      }));
-
-      setTimeout(() => {
-        getUserRole(session.user.id)
-          .then((role) => {
-            setState(prev => ({
-              ...prev,
-              user: { id: session.user!.id, email: session.user!.email || '' },
-              role,
-              isAuthenticated: true,
-              isLoading: false,
-            }));
-          })
-          .catch(() => {
-            setState(prev => ({
-              ...prev,
-              user: { id: session.user!.id, email: session.user!.email || '' },
-              role: 'operator',
-              isAuthenticated: true,
-              isLoading: false,
-            }));
-          });
-      }, 0);
-    });
-
-    // 2) THEN fetch current session
     refreshUser();
-
-    return () => subscription.unsubscribe();
-  }, [refreshUser, getUserRole]);
+  }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-      if (!data.user) throw new Error('Utilisateur non trouvé');
-
-      const role = await getUserRole(data.user.id);
+      const result = await apiClient.login(email, password);
       
       setState(prev => ({
         ...prev,
-        user: { id: data.user.id, email: data.user.email || '' },
-        role,
-        isAuthenticated: true,
-        isLoading: false,
-      }));
-
-      return { success: true };
-    } catch (e: any) {
-      return { success: false, error: formatAuthError(e) };
-    }
-  }, [getUserRole]);
-
-  const signUp = useCallback(async (email: string, password: string) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-      if (!data.user) throw new Error('Erreur lors de la création du compte');
-
-      setState(prev => ({
-        ...prev,
-        user: { id: data.user!.id, email: data.user!.email || '' },
-        role: 'operator',
+        user: { id: result.user.id, email: result.user.email },
+        role: result.user.role as UserRole,
         isAuthenticated: true,
         isLoading: false,
       }));
@@ -173,8 +94,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
-  const logout = useCallback(async () => {
-    await supabase.auth.signOut();
+  const signUp = useCallback(async (email: string, password: string) => {
+    try {
+      const result = await apiClient.signUp(email, password);
+
+      setState(prev => ({
+        ...prev,
+        user: { id: result.user.id, email: result.user.email },
+        role: result.user.role as UserRole,
+        isAuthenticated: true,
+        isLoading: false,
+      }));
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: formatAuthError(e) };
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    apiClient.logout();
     setState(prev => ({ ...prev, user: null, role: null, isAuthenticated: false }));
   }, []);
 

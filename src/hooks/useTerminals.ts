@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/lib/api-client';
 import { Terminal } from '@/types/production';
 
 export type { Terminal };
@@ -10,11 +10,7 @@ export function useTerminals() {
   const { data: terminals = [], isLoading, error, refetch } = useQuery({
     queryKey: ['terminals'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('terminals')
-        .select('*, line:production_lines(*)');
-      
-      if (error) throw new Error(error.message);
+      const data = await apiClient.getTerminals();
       
       return (data as any[]).map((t) => ({
         id: t.id,
@@ -34,13 +30,12 @@ export function useTerminals() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Terminal>) => {
-      const { error } = await supabase.from('terminals').insert({
+      await apiClient.createTerminal({
         device_uid: data.device_uid || data.deviceUid,
         name: data.name,
         line_id: data.line_id || data.lineId,
         ip_address: data.ip_address,
       });
-      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
@@ -49,13 +44,12 @@ export function useTerminals() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Terminal> }) => {
-      const { error } = await supabase.from('terminals').update({
+      await apiClient.updateTerminal(id, {
         device_uid: data.device_uid || data.deviceUid,
         name: data.name,
         line_id: data.line_id || data.lineId,
         ip_address: data.ip_address,
-      }).eq('id', id);
-      if (error) throw new Error(error.message);
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
@@ -64,8 +58,7 @@ export function useTerminals() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('terminals').delete().eq('id', id);
-      if (error) throw new Error(error.message);
+      await apiClient.deleteTerminal(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['terminals'] });
