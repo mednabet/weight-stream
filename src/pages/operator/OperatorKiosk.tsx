@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { Play, Pause, CheckCircle, XCircle, Plus, ArrowLeft, LogOut, Scale } from 'lucide-react';
 
-interface Line { id: string; name: string; status?: string }
+interface Line { id: string; name: string; status?: string; scale_url?: string | null }
 interface Task {
   id: string;
   line_id: string;
@@ -41,8 +41,11 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const [productId, setProductId] = useState<string>('');
   const [targetQty, setTargetQty] = useState<number>(50);
 
-  // Sensor: balance only (no photocell)
-  const sensor = useSensorData({ pollingInterval: 800 });
+  // Get the scale URL from the selected line
+  const selectedLine = useMemo(() => lines.find(l => l.id === lineId) || null, [lines, lineId]);
+
+  // Sensor: balance reads from the line's scale_url
+  const sensor = useSensorData({ scaleUrl: selectedLine?.scale_url, pollingInterval: 800 });
 
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
 

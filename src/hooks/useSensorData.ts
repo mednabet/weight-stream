@@ -62,10 +62,25 @@ function parseWeight(text: string): { value: number; status: WeightStatus } {
   };
 }
 
-// Fetch sensor data via direct HTTP request
-async function fetchSensorViaProxy(url: string): Promise<{ data?: string; error?: string }> {
+// Build the backend proxy URL for the scale
+function buildProxyUrl(scaleUrl: string): string {
+  const apiBase = import.meta.env.VITE_API_URL || '/api';
+  return `${apiBase}/scale-proxy?url=${encodeURIComponent(scaleUrl)}`;
+}
+
+// Fetch sensor data via backend proxy to avoid CORS issues
+async function fetchSensorViaProxy(scaleUrl: string): Promise<{ data?: string; error?: string }> {
   try {
-    const res = await fetch(url, { method: 'GET' });
+    const proxyUrl = buildProxyUrl(scaleUrl);
+    const token = localStorage.getItem('auth_token');
+    const headers: Record<string, string> = {
+      'Cache-Control': 'no-cache',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(proxyUrl, { method: 'GET', headers });
     const text = await res.text();
     if (res.ok) {
       return { data: text };
@@ -87,7 +102,7 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const pollSensors = useCallback(async () => {
-    // Poll scale
+    // Poll scale via backend proxy
     if (scaleUrl) {
       const result = await fetchSensorViaProxy(scaleUrl);
       if (result.data) {
