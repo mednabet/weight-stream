@@ -37,7 +37,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
 import { 
   Factory, Plus, Pencil, Trash2, Loader2, RefreshCw, 
-  Scale, Power, PowerOff, Settings2, Link2
+  Scale, Power, PowerOff, Settings2, Link2, Package
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -46,6 +46,7 @@ interface Line {
   name: string; 
   description?: string;
   scale_url?: string;
+  pallet_scale_url?: string;
   weight_unit_id?: string;
   weight_unit_code?: string;
   weight_unit_symbol?: string;
@@ -57,6 +58,7 @@ interface LineFormData {
   name: string;
   description: string;
   scale_url: string;
+  pallet_scale_url: string;
   weight_unit_id: string;
   is_active: boolean;
 }
@@ -65,6 +67,7 @@ const defaultFormData: LineFormData = {
   name: '',
   description: '',
   scale_url: '',
+  pallet_scale_url: '',
   weight_unit_id: '',
   is_active: true,
 };
@@ -95,6 +98,7 @@ export function LinesManagement() {
       name: line.name || '',
       description: line.description || '',
       scale_url: line.scale_url || '',
+      pallet_scale_url: line.pallet_scale_url || '',
       weight_unit_id: line.weight_unit_id || '',
       is_active: line.is_active !== false,
     });
@@ -250,14 +254,20 @@ export function LinesManagement() {
               </CardHeader>
               <CardContent className="p-3 sm:p-6 pt-0 space-y-3">
                 {/* Configuration info */}
-                <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
+                <div className="grid grid-cols-1 gap-1.5 text-xs sm:text-sm">
                   <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Scale className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="truncate">{line.scale_url ? 'Balance configurée' : 'Pas de balance'}</span>
+                    <Scale className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                    <span className="truncate">{line.scale_url ? 'Balance unitaire configurée' : 'Pas de balance unitaire'}</span>
+                    {line.scale_url && <span className="text-green-500 text-[10px]">●</span>}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Package className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                    <span className="truncate">{line.pallet_scale_url ? 'Balance palette configurée' : 'Pas de balance palette'}</span>
+                    {line.pallet_scale_url && <span className="text-violet-500 text-[10px]">●</span>}
                   </div>
                   {line.weight_unit_symbol && (
-                    <div className="flex items-center gap-1.5 text-muted-foreground col-span-2">
-                      <Link2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Link2 className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span>Unité: {line.weight_unit_symbol} ({line.weight_unit_code})</span>
                     </div>
                   )}
@@ -355,7 +365,7 @@ export function LinesManagement() {
               <div className="space-y-1.5">
                 <Label htmlFor="scale_url" className="text-xs sm:text-sm flex items-center gap-1.5">
                   <Scale className="w-3 h-3" />
-                  URL de la balance
+                  Balance unitaire (pesage produit)
                 </Label>
                 <Input
                   id="scale_url"
@@ -364,6 +374,22 @@ export function LinesManagement() {
                   placeholder="http://192.168.1.100:8080/weight"
                   className="h-9 sm:h-10 text-sm font-mono"
                 />
+                <p className="text-[10px] text-muted-foreground">URL du flux de poids pour le pesage unitaire des produits</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="pallet_scale_url" className="text-xs sm:text-sm flex items-center gap-1.5">
+                  <Package className="w-3 h-3" />
+                  Balance palette (pesage palette)
+                </Label>
+                <Input
+                  id="pallet_scale_url"
+                  value={formData.pallet_scale_url}
+                  onChange={e => setFormData(prev => ({ ...prev, pallet_scale_url: e.target.value }))}
+                  placeholder="http://192.168.1.101:8080/weight"
+                  className="h-9 sm:h-10 text-sm font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground">URL du flux de poids pour le pesage des palettes (si différente de la balance unitaire)</p>
               </div>
               
               <div className="space-y-1.5">
