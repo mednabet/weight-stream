@@ -84,6 +84,14 @@ function Invoke-ExternalCommand {
         [string]$StdInFile = $null
     )
 
+    if ([string]::IsNullOrWhiteSpace($FilePath)) {
+        throw "ERREUR : FilePath vide"
+    }
+
+    if (-not (Test-Path $FilePath)) {
+        throw "ERREUR : Fichier introuvable -> $FilePath"
+    }
+
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $FilePath
     $psi.Arguments = ($Arguments -join " ")
@@ -99,9 +107,8 @@ function Invoke-ExternalCommand {
     [void]$process.Start()
 
     if ($null -ne $StdInFile) {
-        Get-Content -Path $StdInFile -Raw | ForEach-Object {
-            $process.StandardInput.Write($_)
-        }
+        $content = Get-Content -Path $StdInFile -Raw
+        $process.StandardInput.Write($content)
         $process.StandardInput.Close()
     }
 
@@ -169,7 +176,9 @@ Print-Step "Détection du client MySQL"
 
 $mysqlCmd = Get-Command mysql -ErrorAction SilentlyContinue
 
-if ($mysqlCmd) {
+$mysql = $null
+
+if ($mysqlCmd -and $mysqlCmd.Source) {
     $mysql = $mysqlCmd.Source
 } else {
     $possiblePaths = @(
@@ -192,71 +201,10 @@ if ([string]::IsNullOrWhiteSpace($mysql)) {
     exit 1
 }
 
+# ⚠️ IMPORTANT : forcer string propre
+$mysql = $mysql.ToString().Trim()
+
 Print-Success "MySQL client détecté : $mysql"
-
-Print-Step "Configuration de la base de données"
-Write-Host "Veuillez entrer le mot de passe root de MySQL pour créer la base de données."
-
-$MysqlRootPass = Read-Host -AsSecureString "Mot de passe root MySQL"
-$BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($MysqlRootPass)
-
-try {
-    $RootPassPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($BSTR)
-}
-finally {
-    if ($BSTR -ne [IntPtr]::Zero) {
-        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
-    }
-}
-
-$DbPass = New-RandomPassword -Length 16
-
-$SqlScript = @"
-CREATE DATABASE IF NOT EXISTS $DbName CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '$DbUser'@'localhost' IDENTIFIED BY '$DbPass';
-ALTER USER '$DbUser'@'localhost' IDENTIFIED BY '$DbPass';
-GRANT ALL PRIVILEGES ON $DbName.* TO '$DbUser'@'localhost';
-FLUSH PRIVILEGES;
-"@
-
-$SqlFile = Join-Path $env:TEMP "setup_db.sql"
-$SqlScript | Out-File -FilePath $SqlFile -Encoding utf8
-
-try {
-    Print-Step "Test de connexion à MySQL"
-    $testResult = Invoke-ExternalCommand -FilePath $mysql -Arguments @(
-        "-u", "root",
-        "--password=$RootPassPlain",
-        "-e", "SELECT VERSION();"
-    )
-
-    if ($testResult.ExitCode -ne 0) {
-        Print-Error "Connexion MySQL root échouée."
-        Write-Host $testResult.StdErr -ForegroundColor Red
-        Write-Host $testResult.StdOut -ForegroundColor Red
-        exit 1
-    }
-
-    Print-Success "Connexion root MySQL validée."
-
-    Print-Step "Création de la base et de l'utilisateur applicatif"
-    $importResult = Invoke-ExternalCommand -FilePath $mysql -Arguments @(
-        "-u", "root",
-        "--password=$RootPassPlain"
-    ) -StdInFile $SqlFile
-
-    if ($importResult.ExitCode -ne 0) {
-        Print-Error "Échec réel de la configuration de la base de données."
-        Write-Host $importResult.StdErr -ForegroundColor Red
-        Write-Host $importResult.StdOut -ForegroundColor Red
-        exit 1
-    }
-
-    Print-Success "Base de données et utilisateur créés avec succès."
-}
-finally {
-    Remove-Item -Path $SqlFile -ErrorAction SilentlyContinue
-}
 
 Print-Step "Déploiement de l'application"
 
