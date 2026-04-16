@@ -308,14 +308,23 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     isError ? 'Erreur' : 'Hors ligne';
 
   // === Pallet weight state indicator ===
-  const palletWeightState = useMemo(() => {
+  // tolerance_min/max are DEVIATIONS from target (e.g. target=600, tol_min=10, tol_max=10 → range [590, 610])
+  const palletToleranceBounds = useMemo(() => {
     if (!activeTask?.pallet_target_weight || !activeTask?.pallet_tolerance_min || !activeTask?.pallet_tolerance_max) return null;
+    return {
+      min: activeTask.pallet_target_weight - activeTask.pallet_tolerance_min,
+      max: activeTask.pallet_target_weight + activeTask.pallet_tolerance_max,
+    };
+  }, [activeTask?.pallet_target_weight, activeTask?.pallet_tolerance_min, activeTask?.pallet_tolerance_max]);
+
+  const palletWeightState = useMemo(() => {
+    if (!palletToleranceBounds) return null;
     const w = sensor.weight.value;
     if (w === 0) return null;
-    if (w < activeTask.pallet_tolerance_min) return { label: 'Sous-poids', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-400/40', icon: '▼', glow: 'shadow-sky-500/20' };
-    if (w > activeTask.pallet_tolerance_max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20' };
+    if (w < palletToleranceBounds.min) return { label: 'Sous-poids', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-400/40', icon: '▼', glow: 'shadow-sky-500/20' };
+    if (w > palletToleranceBounds.max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20' };
     return { label: 'Dans la tolérance', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-400/40', icon: '●', glow: 'shadow-emerald-500/20' };
-  }, [sensor.weight.value, activeTask?.pallet_target_weight, activeTask?.pallet_tolerance_min, activeTask?.pallet_tolerance_max]);
+  }, [sensor.weight.value, palletToleranceBounds]);
 
   // === Message styling ===
   const messageStyles: Record<PanelMessage['type'], string> = {
@@ -511,13 +520,13 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
                   <span className="text-[11px] text-slate-400">Cible</span>
                   <span className="text-[11px] font-mono font-semibold text-slate-200">{activeTask.pallet_target_weight}</span>
                 </div>
-                {activeTask.pallet_tolerance_min && (
+                {palletToleranceBounds && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                     <span className="text-[11px] text-slate-500">Min</span>
-                    <span className="text-[11px] font-mono text-slate-300">{activeTask.pallet_tolerance_min}</span>
+                    <span className="text-[11px] font-mono text-slate-300">{palletToleranceBounds.min.toFixed(3)}</span>
                     <span className="text-[11px] text-slate-600 mx-0.5">—</span>
                     <span className="text-[11px] text-slate-500">Max</span>
-                    <span className="text-[11px] font-mono text-slate-300">{activeTask.pallet_tolerance_max}</span>
+                    <span className="text-[11px] font-mono text-slate-300">{palletToleranceBounds.max.toFixed(3)}</span>
                   </div>
                 )}
               </div>

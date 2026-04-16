@@ -301,25 +301,34 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     isError ? 'Erreur' : 'Hors ligne';
 
   // === Weight state indicator (tolerance) ===
-  const weightState = useMemo(() => {
+  // tolerance_min/max are DEVIATIONS from target (e.g. target=38, tol_min=2, tol_max=2 → range [36, 40])
+  const toleranceBounds = useMemo(() => {
     if (!activeTask?.target_weight || !activeTask?.tolerance_min || !activeTask?.tolerance_max) return null;
+    return {
+      min: activeTask.target_weight - activeTask.tolerance_min,
+      max: activeTask.target_weight + activeTask.tolerance_max,
+    };
+  }, [activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
+
+  const weightState = useMemo(() => {
+    if (!toleranceBounds) return null;
     const w = sensor.weight.value;
     if (w === 0) return null;
-    if (w < activeTask.tolerance_min) return { label: 'Sous-poids', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-400/40', icon: '▼', glow: 'shadow-sky-500/20', inTolerance: false };
-    if (w > activeTask.tolerance_max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20', inTolerance: false };
+    if (w < toleranceBounds.min) return { label: 'Sous-poids', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-400/40', icon: '▼', glow: 'shadow-sky-500/20', inTolerance: false };
+    if (w > toleranceBounds.max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20', inTolerance: false };
     return { label: 'Dans la tolérance', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-400/40', icon: '●', glow: 'shadow-emerald-500/20', inTolerance: true };
-  }, [sensor.weight.value, activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
+  }, [sensor.weight.value, toleranceBounds]);
 
   // === Confirmed weight state (tolerance check on confirmed weight) ===
   const confirmedWeightState = useMemo(() => {
-    if (!activeTask?.target_weight || !activeTask?.tolerance_min || !activeTask?.tolerance_max) return null;
+    if (!toleranceBounds) return null;
     if (!sensor.confirmedWeight.isConfirmed) return null;
     const w = sensor.confirmedWeight.value;
     if (w === 0) return null;
-    if (w < activeTask.tolerance_min) return { label: 'Sous-poids', inTolerance: false };
-    if (w > activeTask.tolerance_max) return { label: 'Surpoids', inTolerance: false };
+    if (w < toleranceBounds.min) return { label: 'Sous-poids', inTolerance: false };
+    if (w > toleranceBounds.max) return { label: 'Surpoids', inTolerance: false };
     return { label: 'Dans la tolérance', inTolerance: true };
-  }, [sensor.confirmedWeight.isConfirmed, sensor.confirmedWeight.value, activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
+  }, [sensor.confirmedWeight.isConfirmed, sensor.confirmedWeight.value, toleranceBounds]);
 
   // === Auto-validation: uses CONFIRMED weight (multiple stable readings) ===
   const autoValidationRef = useRef(false);
@@ -608,10 +617,10 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                     </div>
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                       <span className="text-[11px] text-slate-500">Min</span>
-                      <span className="text-[11px] font-mono text-slate-300">{activeTask.tolerance_min}</span>
+                      <span className="text-[11px] font-mono text-slate-300">{toleranceBounds ? toleranceBounds.min.toFixed(3) : '-'}</span>
                       <span className="text-[11px] text-slate-600 mx-0.5">—</span>
                       <span className="text-[11px] text-slate-500">Max</span>
-                      <span className="text-[11px] font-mono text-slate-300">{activeTask.tolerance_max}</span>
+                      <span className="text-[11px] font-mono text-slate-300">{toleranceBounds ? toleranceBounds.max.toFixed(3) : '-'}</span>
                     </div>
                   </div>
                 )}
