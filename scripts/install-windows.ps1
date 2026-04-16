@@ -388,9 +388,56 @@ $stopLines += "pause"
 $stopBatPath = Join-Path $AppDirFull "stop.bat"
 [System.IO.File]::WriteAllLines($stopBatPath, $stopLines, [System.Text.Encoding]::ASCII)
 
-Write-OK "start.bat     - Production"
-Write-OK "start-dev.bat - Developpement"
-Write-OK "stop.bat      - Arret"
+# --- start-background.bat (lancement silencieux pour demarrage auto) ---
+$bgLines = @()
+$bgLines += "@echo off"
+$bgLines += "cd /d `"%~dp0`""
+$bgLines += "if not exist `"server\dist\index.js`" exit /b 1"
+$bgLines += "if not exist `"dist\index.html`" exit /b 1"
+$bgLines += ("start /min `"WeightStream-Backend`" cmd /c `"cd /d `"`"%~dp0server`"`" && node dist\index.js`"")
+$bgLines += "timeout /t 5 /nobreak >nul"
+$bgLines += ("start /min `"WeightStream-Frontend`" cmd /c `"cd /d `"`"%~dp0`"`" && npx --yes serve -s dist -l " + $FrontendPort + "`"")
+
+$bgBatPath = Join-Path $AppDirFull "start-background.bat"
+[System.IO.File]::WriteAllLines($bgBatPath, $bgLines, [System.Text.Encoding]::ASCII)
+
+Write-OK "start.bat            - Production (interactif)"
+Write-OK "start-background.bat - Production (silencieux)"
+Write-OK "start-dev.bat        - Developpement"
+Write-OK "stop.bat             - Arret"
+
+# ================================================================
+# ETAPE 9 - Demarrage automatique avec Windows
+# ================================================================
+Write-Step "ETAPE 9 - Demarrage automatique avec Windows"
+
+$taskName = "WeightStream-AutoStart"
+
+# Supprimer l ancienne tache si elle existe
+$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($existingTask) {
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+    Write-Info "Ancienne tache planifiee supprimee."
+}
+
+# Creer la tache planifiee au demarrage de Windows
+$action = New-ScheduledTaskAction -Execute $bgBatPath -WorkingDirectory $AppDirFull
+$trigger = New-ScheduledTaskTrigger -AtStartup
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
+$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Demarrage automatique de Weight Stream (Backend + Frontend) - NETPROCESS" | Out-Null
+
+if ($?) {
+    Write-OK ("Tache planifiee '" + $taskName + "' creee avec succes.")
+    Write-OK "Weight Stream demarrera automatiquement au prochain redemarrage de Windows."
+} else {
+    Write-Warn "Impossible de creer la tache planifiee."
+    Write-Host "  Vous pouvez l ajouter manuellement :" -ForegroundColor Yellow
+    Write-Host ("  1. Ouvrir le Planificateur de taches") -ForegroundColor Yellow
+    Write-Host ("  2. Creer une tache avec le declencheur 'Au demarrage'") -ForegroundColor Yellow
+    Write-Host ("  3. Action : Executer " + $bgBatPath) -ForegroundColor Yellow
+}
 
 # ================================================================
 # Resume final
@@ -418,8 +465,13 @@ if (-not $DbConfigured) {
 Write-Host ""
 Write-Host "  Scripts de lancement :" -ForegroundColor Yellow
 Write-Host ("    Production    : " + $startBatPath)
+Write-Host ("    Silencieux    : " + $bgBatPath)
 Write-Host ("    Developpement : " + $devBatPath)
 Write-Host ("    Arret         : " + $stopBatPath)
+Write-Host ""
+Write-Host "  Demarrage automatique :" -ForegroundColor Yellow
+Write-Host ("    Tache planifiee : " + $taskName)
+Write-Host "    Statut          : Actif (au demarrage de Windows)"
 Write-Host ""
 Write-Host ("  Acces : http://" + $ServerName + ":" + $FrontendPort) -ForegroundColor Green
 Write-Host "  Le premier utilisateur inscrit deviendra administrateur." -ForegroundColor Green
