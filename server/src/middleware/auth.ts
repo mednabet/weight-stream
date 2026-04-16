@@ -31,7 +31,9 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       `SELECT u.id, u.email, ur.role 
        FROM users u 
        LEFT JOIN user_roles ur ON u.id = ur.user_id 
-       WHERE u.id = ? AND u.is_active = TRUE`,
+       WHERE u.id = ? AND u.is_active = TRUE
+       ORDER BY FIELD(ur.role, 'admin', 'supervisor', 'operator')
+       LIMIT 1`,
       [decoded.userId]
     );
 
