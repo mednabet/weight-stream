@@ -1,40 +1,58 @@
 <#
 .SYNOPSIS
-Script d'installation Weight Stream pour Windows
-
-.AUTEUR
-NETPROCESS (https://netprocess.ma)
-Développeur: Mohammed NABET (+212 661 550 618)
-
-.VERSION
-4.0.1
+Installateur Windows pour Weight Stream
 
 .DESCRIPTION
-Ce script installe et configure Weight Stream sur un environnement Windows.
-Il vérifie les prérequis (Node.js, Git, MySQL), clone le dépôt, installe les dépendances,
-configure les variables d'environnement et prépare l'application pour le lancement.
+- Vérifie Node.js, npm, Git et MySQL
+- Utilise le repo courant si le script est lancé depuis weight-stream
+- Sinon clone le dépôt GitHub
+- Crée la base MySQL et l'utilisateur applicatif
+- Génère server\.env
+- Installe et build le frontend et le backend
+- Crée start.bat pour lancer l'application
 
-.NOTES
-L'exécution de ce script nécessite des privilèges d'administrateur.
-À lancer dans PowerShell en administrateur :
+.EXAMPLE
+PowerShell Administrateur :
 Set-ExecutionPolicy Bypass -Scope Process -Force
 .\scripts\install-windows.ps1
+
+.EXAMPLE
+Forcer le clonage depuis GitHub :
+.\scripts\install-windows.ps1 -ForceClone
+
+.EXAMPLE
+Installer ailleurs :
+.\scripts\install-windows.ps1 -InstallRoot "D:\Apps\WeightStream"
 #>
 
-# Forcer l'exécution en tant qu'administrateur
+[CmdletBinding()]
+param(
+    [string]$InstallRoot = "C:\WeightStream",
+    [string]$RepoUrl = "https://github.com/mednabet/weight-stream.git",
+    [string]$DbName = "production_manager",
+    [string]$DbUser = "prod_app",
+    [int]$FrontendPort = 8080,
+    [int]$BackendPort = 3001,
+    [switch]$ForceClone
+)
+
+$ErrorActionPreference = "Stop"
+
+# ------------------------------------------------------------
+# Admin check
+# ------------------------------------------------------------
 if (
     -not (
         [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 ) {
     Write-Warning "Ce script doit être exécuté en tant qu'Administrateur."
-    Write-Host "Veuillez relancer PowerShell en tant qu'Administrateur et réexécuter le script."
     exit 1
 }
 
-$ErrorActionPreference = "Stop"
-
-# Couleurs
+# ------------------------------------------------------------
+# UI helpers
+# ------------------------------------------------------------
 $ColorInfo = "Cyan"
 $ColorSuccess = "Green"
 $ColorWarning = "Yellow"
@@ -61,50 +79,70 @@ function Print-Error {
     Write-Host "[ERROR] $Message" -ForegroundColor $ColorError
 }
 
-function Test-Command {
-    param([Parameter(Mandatory = $true)][string]$Name)
-    return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
-}
+# ------------------------------------------------------------
+# Utilities
+# ------------------------------------------------------------
+function Resolve-Executable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
 
-function New-RandomPassword {
-    param([int]$Length = 16)
+        [string[]]$FallbackPaths = @()
+    )
 
-    $chars = @()
-    $chars += [char[]]"abcdefghijklmnopqrstuvwxyz"
-    $chars += [char[]]"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    $chars += [char[]]"0123456789"
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) {
+        return $cmd.Source.ToString().Trim()
+    }
 
-    return -join (1..$Length | ForEach-Object { $chars | Get-Random })
+    foreach ($path in $FallbackPaths) {
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path $path)) {
+            return (Resolve-Path $path).Path
+        }
+    }
+
+    return $null
 }
 
 function Invoke-ExternalCommand {
     param(
-        [Parameter(Mandatory = $true)][string]$FilePath,
-        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$Arguments = @(),
+
+        [string]$WorkingDirectory = $null,
+
         [string]$StdInFile = $null
     )
 
     if ([string]::IsNullOrWhiteSpace($FilePath)) {
-        throw "ERREUR : FilePath vide"
+        throw "Le chemin de commande est vide."
     }
 
-    # 🔥 Détection correcte commande ou chemin
-    if (-not (Test-Path $FilePath)) {
-        $cmd = Get-Command $FilePath -ErrorAction SilentlyContinue
-        if (-not $cmd) {
-            throw "ERREUR : Commande introuvable -> $FilePath"
+    $resolved = $FilePath
+
+    if (-not (Test-Path $resolved)) {
+        $cmd = Get-Command $resolved -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source) {
+            $resolved = $cmd.Source
+        } else {
+            throw "Commande introuvable : $FilePath"
         }
-        $FilePath = $cmd.Source
     }
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $FilePath
+    $psi.FileName = $resolved
     $psi.Arguments = ($Arguments -join " ")
     $psi.UseShellExecute = $false
-    $psi.RedirectStandardError = $true
     $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
     $psi.RedirectStandardInput = ($null -ne $StdInFile)
     $psi.CreateNoWindow = $true
+
+    if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+        $psi.WorkingDirectory = $WorkingDirectory
+    }
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $psi
@@ -122,143 +160,248 @@ function Invoke-ExternalCommand {
 
     $process.WaitForExit()
 
-    return [PSCustomObject]@{
+    [PSCustomObject]@{
         ExitCode = $process.ExitCode
         StdOut   = $stdout
         StdErr   = $stderr
+        FilePath = $resolved
     }
 }
 
-# Variables
-$InstallRoot = "C:\WeightStream"
-$AppDir = Join-Path $InstallRoot "weight-stream"
-$RepoUrl = "https://github.com/mednabet/weight-stream.git"
-$DbName = "production_manager"
-$DbUser = "prod_app"
-
-Print-Step "Vérification des prérequis"
-
-# Vérifier Node.js
-if (-not (Test-Command "node")) {
-    Print-Error "Node.js n'est pas installé ou n'est pas dans le PATH. Veuillez l'installer depuis https://nodejs.org/ (version 22.x recommandée)."
-    exit 1
-}
-try {
-    $NodeVersion = & node -v
-    Print-Success "Node.js est installé ($NodeVersion)"
-} catch {
-    Print-Error "Impossible d'exécuter Node.js."
-    exit 1
-}
-
-# Vérifier npm
-if (-not (Test-Command "npm")) {
-    Print-Error "npm n'est pas installé ou n'est pas dans le PATH."
-    exit 1
-}
-try {
-    $NpmVersion = & npm -v
-    Print-Success "npm est installé ($NpmVersion)"
-} catch {
-    Print-Error "Impossible d'exécuter npm."
-    exit 1
-}
-
-# Vérifier Git
-if (-not (Test-Command "git")) {
-    Print-Error "Git n'est pas installé ou n'est pas dans le PATH. Veuillez l'installer depuis https://git-scm.com/"
-    exit 1
-}
-try {
-    $GitVersion = & git --version
-    Print-Success "Git est installé ($GitVersion)"
-} catch {
-    Print-Error "Impossible d'exécuter Git."
-    exit 1
-}
-
-Print-Step "Détection du client MySQL"
-
-$mysqlCmd = Get-Command mysql -ErrorAction SilentlyContinue
-
-$mysql = $null
-
-if ($mysqlCmd -and $mysqlCmd.Source) {
-    $mysql = $mysqlCmd.Source
-} else {
-    $possiblePaths = @(
-        "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
-        "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
-        "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe",
-        "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
+function Assert-CommandSuccess {
+    param(
+        [Parameter(Mandatory = $true)]
+        $Result,
+        [Parameter(Mandatory = $true)]
+        [string]$ErrorMessage
     )
 
-    foreach ($path in $possiblePaths) {
-        if (Test-Path $path) {
-            $mysql = $path
-            break
+    if ($Result.ExitCode -ne 0) {
+        Print-Error $ErrorMessage
+        if (-not [string]::IsNullOrWhiteSpace($Result.StdErr)) {
+            Write-Host $Result.StdErr -ForegroundColor $ColorError
         }
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($mysql)) {
-    Print-Error "mysql.exe introuvable. Vérifiez l'installation ou le PATH."
-    exit 1
-}
-
-# ⚠️ IMPORTANT : forcer string propre
-$mysql = $mysql.ToString().Trim()
-
-Print-Success "MySQL client détecté : $mysql"
-
-Print-Step "Déploiement de l'application"
-
-if (-not (Test-Path $InstallRoot)) {
-    New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
-}
-
-if (Test-Path $AppDir) {
-    Print-Warning "Le dossier $AppDir existe déjà."
-    $overwrite = Read-Host "Voulez-vous le supprimer et recommencer ? (O/N)"
-    if ($overwrite -match "^[OoYy]$") {
-        Remove-Item -Path $AppDir -Recurse -Force
-        Print-Success "Ancien dossier supprimé."
-    } else {
-        Print-Error "Installation annulée."
+        if (-not [string]::IsNullOrWhiteSpace($Result.StdOut)) {
+            Write-Host $Result.StdOut -ForegroundColor $ColorError
+        }
         exit 1
     }
 }
 
-Write-Host "Clonage du dépôt GitHub..."
-$cloneResult = Invoke-ExternalCommand -FilePath "git" -Arguments @(
-    "clone",
-    $RepoUrl,
-    $AppDir
-)
+function New-RandomPassword {
+    param([int]$Length = 20)
 
-if ($cloneResult.ExitCode -ne 0) {
-    Print-Error "Échec du clonage du dépôt."
-    if (-not [string]::IsNullOrWhiteSpace($cloneResult.StdErr)) {
-        Write-Host $cloneResult.StdErr -ForegroundColor $ColorError
+    $chars = [char[]]"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    return -join (1..$Length | ForEach-Object { $chars | Get-Random })
+}
+
+# ------------------------------------------------------------
+# Detect current repo or target install folder
+# ------------------------------------------------------------
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRootFromScript = Resolve-Path (Join-Path $ScriptDir "..")
+$CurrentRepoPackage = Join-Path $RepoRootFromScript "package.json"
+$CurrentServerPackage = Join-Path $RepoRootFromScript "server\package.json"
+
+$UseCurrentRepo = $false
+if ((Test-Path $CurrentRepoPackage) -and (Test-Path $CurrentServerPackage) -and (-not $ForceClone)) {
+    $UseCurrentRepo = $true
+}
+
+$TargetAppDir = Join-Path $InstallRoot "weight-stream"
+
+# ------------------------------------------------------------
+# Detect executables
+# ------------------------------------------------------------
+Print-Step "Vérification des prérequis"
+
+$NodeExe = Resolve-Executable -Name "node"
+if (-not $NodeExe) {
+    Print-Error "Node.js introuvable. Installe Node.js 22.x puis relance."
+    exit 1
+}
+$NodeVersion = (& $NodeExe -v)
+Print-Success "Node.js détecté : $NodeVersion"
+
+$NpmExe = Resolve-Executable -Name "npm.cmd" -FallbackPaths @(
+    "$env:ProgramFiles\nodejs\npm.cmd",
+    "$env:ProgramFiles(x86)\nodejs\npm.cmd"
+)
+if (-not $NpmExe) {
+    Print-Error "npm introuvable."
+    exit 1
+}
+$NpmVersion = (& $NpmExe -v)
+Print-Success "npm détecté : $NpmVersion"
+
+$NpxExe = Resolve-Executable -Name "npx.cmd" -FallbackPaths @(
+    "$env:ProgramFiles\nodejs\npx.cmd",
+    "$env:ProgramFiles(x86)\nodejs\npx.cmd"
+)
+if (-not $NpxExe) {
+    Print-Error "npx introuvable."
+    exit 1
+}
+Print-Success "npx détecté : $NpxExe"
+
+$GitExe = Resolve-Executable -Name "git.exe" -FallbackPaths @(
+    "$env:ProgramFiles\Git\cmd\git.exe",
+    "$env:ProgramFiles\Git\bin\git.exe",
+    "$env:ProgramFiles(x86)\Git\cmd\git.exe",
+    "$env:ProgramFiles(x86)\Git\bin\git.exe"
+)
+if (-not $GitExe) {
+    Print-Error "Git introuvable."
+    exit 1
+}
+$GitVersion = (& $GitExe --version)
+Print-Success "Git détecté : $GitVersion"
+
+$MysqlExe = Resolve-Executable -Name "mysql.exe" -FallbackPaths @(
+    "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
+    "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
+    "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe",
+    "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
+)
+if (-not $MysqlExe) {
+    Print-Error "mysql.exe introuvable."
+    exit 1
+}
+$MysqlVersion = (& $MysqlExe --version)
+Print-Success "MySQL détecté : $MysqlVersion"
+
+# ------------------------------------------------------------
+# Acquire source code
+# ------------------------------------------------------------
+Print-Step "Préparation du code source"
+
+if ($UseCurrentRepo) {
+    $SourceRepoDir = $RepoRootFromScript.Path
+    Print-Success "Repo courant détecté : $SourceRepoDir"
+} else {
+    if (-not (Test-Path $InstallRoot)) {
+        New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
     }
-    if (-not [string]::IsNullOrWhiteSpace($cloneResult.StdOut)) {
-        Write-Host $cloneResult.StdOut -ForegroundColor $ColorError
+
+    if (Test-Path $TargetAppDir) {
+        $overwrite = Read-Host "Le dossier $TargetAppDir existe déjà. Le supprimer ? (O/N)"
+        if ($overwrite -match "^[OoYy]$") {
+            Remove-Item -Path $TargetAppDir -Recurse -Force
+        } else {
+            Print-Error "Installation annulée."
+            exit 1
+        }
     }
+
+    Print-Step "Clonage du dépôt GitHub"
+    $clone = Invoke-ExternalCommand -FilePath $GitExe -Arguments @(
+        "clone",
+        $RepoUrl,
+        $TargetAppDir
+    )
+    Assert-CommandSuccess -Result $clone -ErrorMessage "Échec du clonage Git."
+
+    $SourceRepoDir = $TargetAppDir
+    Print-Success "Dépôt cloné dans $SourceRepoDir"
+}
+
+# Si on installe depuis le repo courant, on déploie dans InstallRoot\weight-stream
+if ($UseCurrentRepo) {
+    if (-not (Test-Path $InstallRoot)) {
+        New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
+    }
+
+    if (Test-Path $TargetAppDir) {
+        $samePath = ((Resolve-Path $TargetAppDir -ErrorAction SilentlyContinue) -and ((Resolve-Path $TargetAppDir).Path -eq (Resolve-Path $SourceRepoDir).Path))
+        if (-not $samePath) {
+            $overwrite = Read-Host "Le dossier $TargetAppDir existe déjà. Le remplacer ? (O/N)"
+            if ($overwrite -match "^[OoYy]$") {
+                Remove-Item -Path $TargetAppDir -Recurse -Force
+            } else {
+                Print-Error "Installation annulée."
+                exit 1
+            }
+        }
+    }
+
+    if (-not (Test-Path $TargetAppDir)) {
+        Print-Step "Copie du projet vers le dossier d'installation"
+        Copy-Item -Path $SourceRepoDir -Destination $TargetAppDir -Recurse -Force
+    } elseif ((Resolve-Path $TargetAppDir).Path -eq (Resolve-Path $SourceRepoDir).Path) {
+        Print-Success "Le repo courant est déjà le dossier d'installation."
+    }
+}
+
+$AppDir = $TargetAppDir
+$ServerDir = Join-Path $AppDir "server"
+
+if (-not (Test-Path (Join-Path $AppDir "package.json"))) {
+    Print-Error "package.json introuvable dans $AppDir"
+    exit 1
+}
+if (-not (Test-Path (Join-Path $ServerDir "package.json"))) {
+    Print-Error "server\package.json introuvable dans $ServerDir"
     exit 1
 }
 
-Print-Success "Dépôt cloné avec succès."
+# ------------------------------------------------------------
+# MySQL setup
+# ------------------------------------------------------------
+Print-Step "Configuration MySQL"
 
-# Générer un JWT Secret
-$JwtSecret = New-RandomPassword -Length 64
+$MysqlRootPass = Read-Host -AsSecureString "Mot de passe root MySQL"
+$BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($MysqlRootPass)
 
+try {
+    $RootPassPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($BSTR)
+}
+finally {
+    if ($BSTR -ne [IntPtr]::Zero) {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($RootPassPlain)) {
+    Print-Error "Le mot de passe root MySQL est vide."
+    exit 1
+}
+
+$DbPass = New-RandomPassword -Length 20
+
+$SqlScript = @"
+CREATE DATABASE IF NOT EXISTS $DbName CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$DbUser'@'localhost' IDENTIFIED BY '$DbPass';
+ALTER USER '$DbUser'@'localhost' IDENTIFIED BY '$DbPass';
+GRANT ALL PRIVILEGES ON $DbName.* TO '$DbUser'@'localhost';
+FLUSH PRIVILEGES;
+"@
+
+$SqlFile = Join-Path $env:TEMP "weight_stream_setup_db.sql"
+$SqlScript | Out-File -FilePath $SqlFile -Encoding utf8
+
+$mysqlTest = Invoke-ExternalCommand -FilePath $MysqlExe -Arguments @(
+    "-u", "root",
+    "--password=$RootPassPlain",
+    "-e", "SELECT VERSION();"
+)
+Assert-CommandSuccess -Result $mysqlTest -ErrorMessage "Connexion MySQL root échouée."
+Print-Success "Connexion root MySQL validée."
+
+$mysqlImport = Invoke-ExternalCommand -FilePath $MysqlExe -Arguments @(
+    "-u", "root",
+    "--password=$RootPassPlain"
+) -StdInFile $SqlFile
+Assert-CommandSuccess -Result $mysqlImport -ErrorMessage "Création de la base MySQL échouée."
+Print-Success "Base et utilisateur MySQL créés."
+
+Remove-Item -Path $SqlFile -ErrorAction SilentlyContinue
+
+# ------------------------------------------------------------
+# Environment file
+# ------------------------------------------------------------
 Print-Step "Configuration de l'environnement"
 
-$ServerDir = Join-Path $AppDir "server"
-if (-not (Test-Path $ServerDir)) {
-    Print-Error "Le dossier backend '$ServerDir' est introuvable après clonage."
-    exit 1
-}
+$JwtSecret = New-RandomPassword -Length 64
 
 $EnvContent = @"
 # Database MySQL
@@ -269,9 +412,9 @@ DB_USER=$DbUser
 DB_PASSWORD=$DbPass
 
 # Server
-PORT=3001
+PORT=$BackendPort
 NODE_ENV=production
-CORS_ORIGIN=http://localhost:8080
+CORS_ORIGIN=http://localhost:$FrontendPort
 
 # Security
 JWT_SECRET=$JwtSecret
@@ -281,72 +424,51 @@ $EnvFile = Join-Path $ServerDir ".env"
 $EnvContent | Out-File -FilePath $EnvFile -Encoding utf8
 Print-Success "Fichier .env généré : $EnvFile"
 
-Print-Step "Installation des dépendances et build"
+# ------------------------------------------------------------
+# Install dependencies + build
+# ------------------------------------------------------------
+Print-Step "Installation et build"
 
-Set-Location $AppDir
-
-Write-Host "Installation des dépendances frontend..."
-$frontendInstall = Invoke-ExternalCommand -FilePath "npm.cmd" -Arguments @("install")
-if ($frontendInstall.ExitCode -ne 0) {
-    Print-Error "Échec de l'installation des dépendances frontend."
-    Write-Host $frontendInstall.StdErr -ForegroundColor $ColorError
-    Write-Host $frontendInstall.StdOut -ForegroundColor $ColorError
-    exit 1
-}
+$frontendInstall = Invoke-ExternalCommand -FilePath $NpmExe -Arguments @("install") -WorkingDirectory $AppDir
+Assert-CommandSuccess -Result $frontendInstall -ErrorMessage "Échec de npm install (frontend)."
 Print-Success "Dépendances frontend installées."
 
-Write-Host "Build du frontend..."
-$frontendBuild = Invoke-ExternalCommand -FilePath "npm.cmd" -Arguments @("run", "build")
-if ($frontendBuild.ExitCode -ne 0) {
-    Print-Error "Échec du build frontend."
-    Write-Host $frontendBuild.StdErr -ForegroundColor $ColorError
-    Write-Host $frontendBuild.StdOut -ForegroundColor $ColorError
-    exit 1
-}
+$frontendBuild = Invoke-ExternalCommand -FilePath $NpmExe -Arguments @("run", "build") -WorkingDirectory $AppDir
+Assert-CommandSuccess -Result $frontendBuild -ErrorMessage "Échec du build frontend."
 Print-Success "Build frontend terminé."
 
-Set-Location $ServerDir
-
-Write-Host "Installation des dépendances backend..."
-$backendInstall = Invoke-ExternalCommand -FilePath "npm.cmd" -Arguments @("install", "--production=false")
-if ($backendInstall.ExitCode -ne 0) {
-    Print-Error "Échec de l'installation des dépendances backend."
-    Write-Host $backendInstall.StdErr -ForegroundColor $ColorError
-    Write-Host $backendInstall.StdOut -ForegroundColor $ColorError
-    exit 1
-}
+$backendInstall = Invoke-ExternalCommand -FilePath $NpmExe -Arguments @("install") -WorkingDirectory $ServerDir
+Assert-CommandSuccess -Result $backendInstall -ErrorMessage "Échec de npm install (backend)."
 Print-Success "Dépendances backend installées."
 
-Write-Host "Build du backend..."
-$backendBuild = Invoke-ExternalCommand -FilePath "npm.cmd" -Arguments @("run", "build")
-if ($backendBuild.ExitCode -ne 0) {
-    Print-Error "Échec du build backend."
-    Write-Host $backendBuild.StdErr -ForegroundColor $ColorError
-    Write-Host $backendBuild.StdOut -ForegroundColor $ColorError
-    exit 1
-}
+$backendBuild = Invoke-ExternalCommand -FilePath $NpmExe -Arguments @("run", "build") -WorkingDirectory $ServerDir
+Assert-CommandSuccess -Result $backendBuild -ErrorMessage "Échec du build backend."
 Print-Success "Build backend terminé."
 
+# ------------------------------------------------------------
+# Create launcher
+# ------------------------------------------------------------
 Print-Step "Création des scripts de lancement"
 
 $StartScript = @"
 @echo off
-echo ============================================
-echo   Weight Stream - Lancement
-echo   Auteur: NETPROCESS (https://netprocess.ma)
-echo ============================================
-
+title Weight Stream
 cd /d "%~dp0"
 
-echo Demarrage du Backend (Port 3001)...
-start "Weight Stream Backend" cmd /c "cd /d server && node dist\index.js"
+echo ============================================
+echo   Weight Stream - Lancement
+echo ============================================
+echo.
 
-echo Demarrage du Frontend (Port 8080)...
-start "Weight Stream Frontend" cmd /c "npx serve -s dist -l 8080"
+echo Demarrage du backend sur $BackendPort...
+start "Weight Stream Backend" cmd /k "cd /d ""%~dp0server"" && node dist\index.js"
+
+echo Demarrage du frontend sur $FrontendPort...
+start "Weight Stream Frontend" cmd /k "cd /d ""%~dp0"" && ""$NpxExe"" serve -s dist -l $FrontendPort"
 
 echo.
-echo Application demarree !
-echo Acces: http://localhost:8080
+echo Application disponible sur :
+echo   http://localhost:$FrontendPort
 echo.
 pause
 "@
@@ -355,24 +477,25 @@ $StartBat = Join-Path $AppDir "start.bat"
 $StartScript | Out-File -FilePath $StartBat -Encoding ascii
 Print-Success "Script de lancement créé : $StartBat"
 
+# ------------------------------------------------------------
+# Final summary
+# ------------------------------------------------------------
 Print-Step "Installation terminée"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor $ColorSuccess
-Write-Host "Installation terminée avec succès !" -ForegroundColor $ColorSuccess
+Write-Host "Installation terminée avec succès" -ForegroundColor $ColorSuccess
 Write-Host "============================================" -ForegroundColor $ColorSuccess
 Write-Host ""
-Write-Host "Application : Weight Stream v4.0.1" -ForegroundColor $ColorInfo
-Write-Host "Auteur      : NETPROCESS (https://netprocess.ma)" -ForegroundColor $ColorInfo
-Write-Host "Répertoire  : $AppDir" -ForegroundColor $ColorInfo
+Write-Host "Répertoire : $AppDir" -ForegroundColor $ColorInfo
+Write-Host "Backend    : http://localhost:$BackendPort" -ForegroundColor $ColorInfo
+Write-Host "Frontend   : http://localhost:$FrontendPort" -ForegroundColor $ColorInfo
 Write-Host ""
-Write-Host "Base de données MySQL :" -ForegroundColor $ColorWarning
-Write-Host "  Base : $DbName"
+Write-Host "Base MySQL :" -ForegroundColor $ColorWarning
+Write-Host "  DB   : $DbName"
 Write-Host "  User : $DbUser"
 Write-Host "  Pass : sauvegardé dans $EnvFile"
 Write-Host ""
-Write-Host "Pour démarrer l'application, exécutez :" -ForegroundColor $ColorInfo
+Write-Host "Pour lancer l'application :" -ForegroundColor $ColorInfo
 Write-Host "  $StartBat"
-Write-Host ""
-Write-Host "Le premier utilisateur inscrit deviendra automatiquement administrateur." -ForegroundColor $ColorSuccess
 Write-Host ""
