@@ -191,6 +191,54 @@ function Assert-CommandSuccess {
     }
 }
 
+function Invoke-MySqlCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$MysqlExe,
+        [Parameter(Mandatory = $true)][string]$RootPassPlain,
+        [string]$Sql = $null,
+        [string]$SqlFile = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($MysqlExe)) {
+        throw "mysql.exe est vide."
+    }
+
+    if (-not (Test-Path $MysqlExe)) {
+        throw "mysql.exe introuvable : $MysqlExe"
+    }
+
+    $tmpCnf = Join-Path $env:TEMP "weight_stream_mysql.cnf"
+    @"
+[client]
+user=root
+password=$RootPassPlain
+"@ | Out-File -FilePath $tmpCnf -Encoding ascii -Force
+
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($Sql)) {
+            $result = & $MysqlExe "--defaults-extra-file=$tmpCnf" -e $Sql 2>&1
+            return [PSCustomObject]@{
+                ExitCode = $LASTEXITCODE
+                Output   = ($result | Out-String)
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($SqlFile)) {
+            $content = Get-Content -Path $SqlFile -Raw
+            $content | & $MysqlExe "--defaults-extra-file=$tmpCnf" 2>&1
+            return [PSCustomObject]@{
+                ExitCode = $LASTEXITCODE
+                Output   = ""
+            }
+        }
+
+        throw "Aucune commande SQL fournie."
+    }
+    finally {
+        Remove-Item $tmpCnf -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function New-RandomPassword {
     param([int]$Length = 20)
 
@@ -385,19 +433,24 @@ FLUSH PRIVILEGES;
 $SqlFile = Join-Path $env:TEMP "weight_stream_setup_db.sql"
 $SqlScript | Out-File -FilePath $SqlFile -Encoding utf8
 
-$mysqlTest = Invoke-ExternalCommand -FilePath $MysqlExe -Arguments @(
-    "-u", "root",
-    "--password=$RootPassPlain",
-    "-e", "SELECT VERSION();"
-)
-Assert-CommandSuccess -Result $mysqlTest -ErrorMessage "Connexion MySQL root échouée."
+$mysqlTest = Invoke-MySqlCommand -MysqlExe $MysqlExe -RootPassPlain $RootPassPlain -Sql "SELECT VERSION();"
+
+if ($mysqlTest.ExitCode -ne 0) {
+    Print-Error "Connexion MySQL root échouée."
+    Write-Host $mysqlTest.Output -ForegroundColor Red
+    exit 1
+}
+
 Print-Success "Connexion root MySQL validée."
 
-$mysqlImport = Invoke-ExternalCommand -FilePath $MysqlExe -Arguments @(
-    "-u", "root",
-    "--password=$RootPassPlain"
-) -StdInFile $SqlFile
-Assert-CommandSuccess -Result $mysqlImport -ErrorMessage "Création de la base MySQL échouée."
+$mysqlImport = Invoke-MySqlCommand -MysqlExe $MysqlExe -RootPassPlain $RootPassPlain -SqlFile $SqlFile
+
+if ($mysqlImport.ExitCode -ne 0) {
+    Print-Error "Création de la base MySQL échouée."
+    Write-Host $mysqlImport.Output -ForegroundColor Red
+    exit 1
+}
+
 Print-Success "Base et utilisateur MySQL créés."
 
 Remove-Item -Path $SqlFile -ErrorAction SilentlyContinue
