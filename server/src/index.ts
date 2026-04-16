@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
@@ -67,7 +69,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, server-to-server)
+    // Allow requests with no origin (mobile apps, Postman, server-to-server, same-origin)
     if (!origin) {
       return callback(null, true);
     }
@@ -77,12 +79,18 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // In development only, allow localhost origins
+    // In production with no CORS_ORIGIN configured, allow same-origin requests
+    // (frontend served by same Express server)
+    if (allowedOrigins.length === 0) {
+      return callback(null, true);
+    }
+
+    // In development, allow localhost origins
     if (!isProduction && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
       return callback(null, true);
     }
 
-    // In development only, allow manus.computer proxy domains
+    // In development, allow manus.computer proxy domains
     if (!isProduction && origin.includes('manus.computer')) {
       return callback(null, true);
     }
@@ -115,6 +123,24 @@ app.get('/api/health', (_, res) => {
     timestamp: new Date().toISOString(),
     environment: isProduction ? 'production' : 'development',
     database: isPoolReady() ? 'connected' : 'not_configured',
+  });
+});
+
+// ─── Serve frontend static files in production ───
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDist = path.resolve(__dirname, '../../dist');
+
+// Serve static assets (JS, CSS, images, etc.)
+app.use(express.static(frontendDist));
+
+// SPA fallback: all non-API routes serve index.html
+app.get('*', (_req, res) => {
+  const indexPath = path.join(frontendDist, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      res.status(404).json({ error: 'Frontend not built. Run: npm run build' });
+    }
   });
 });
 

@@ -3,10 +3,11 @@
     Script d installation Weight Stream pour Windows
     Auteur: NETPROCESS (https://netprocess.ma)
     Developpeur: Mohammed NABET (+212 661 550 618)
-    Version: 4.2.0
+    Version: 5.0.0
 
 .DESCRIPTION
     Ce script installe et configure Weight Stream sur un environnement Windows.
+    Architecture single-port : le backend Express sert aussi le frontend (pas besoin de serve).
     Prerequis manuels : Node.js 22.x, Git, MySQL 8.0+
 
 .PARAMETER AppDir
@@ -68,9 +69,10 @@ function Test-Cmd {
 # --- Banniere ---
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  Weight Stream v4.2.0 - Installation Windows"               -ForegroundColor Cyan
+Write-Host "  Weight Stream v5.0.0 - Installation Windows"               -ForegroundColor Cyan
 Write-Host "  Auteur : NETPROCESS (https://netprocess.ma)"               -ForegroundColor Cyan
 Write-Host "  Dev    : Mohammed NABET (+212 661 550 618)"                 -ForegroundColor Cyan
+Write-Host "  Architecture : Single-port (Express sert le frontend)"     -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host ("  Repertoire : " + $AppDir)
@@ -117,8 +119,7 @@ if (-not $mysqlAvailable) {
 $DbName = "production_manager"
 $DbUser = "prod_app"
 $DbPass = Get-RandomPassword -Length 24
-$FrontendPort = 8080
-$BackendPort  = 3001
+$AppPort = 3001
 $DbConfigured = $false
 
 if ($mysqlAvailable) {
@@ -243,12 +244,7 @@ if (-not (Test-Path $ServerDir)) {
 
 $JwtSecret = Get-RandomPassword -Length 64
 
-if ($ServerName -eq "localhost") {
-    $corsOrigin = "http://localhost:" + $FrontendPort
-} else {
-    $corsOrigin = "http://" + $ServerName
-}
-
+# En mode single-port, pas besoin de CORS_ORIGIN car frontend et backend sont sur le meme port
 $envLines = @()
 $envLines += "# Base de donnees MySQL"
 $envLines += "DB_HOST=localhost"
@@ -258,16 +254,16 @@ $envLines += ("DB_USER=" + $DbUser)
 $envLines += ("DB_PASSWORD=" + $DbPass)
 $envLines += ""
 $envLines += "# Serveur"
-$envLines += ("PORT=" + $BackendPort)
+$envLines += ("PORT=" + $AppPort)
 $envLines += "NODE_ENV=production"
-$envLines += ("CORS_ORIGIN=" + $corsOrigin)
+$envLines += "# CORS_ORIGIN non necessaire : frontend servi par le meme serveur Express"
 $envLines += ""
 $envLines += "# Securite"
 $envLines += ("JWT_SECRET=" + $JwtSecret)
 
 $envPath = Join-Path $ServerDir ".env"
 [System.IO.File]::WriteAllLines($envPath, $envLines, [System.Text.Encoding]::UTF8)
-Write-OK ("Fichier .env genere : " + $envPath)
+Write-OK ("Fichier .env genere dans " + $envPath)
 
 # ================================================================
 # ETAPE 5 - Installation des dependances
@@ -308,19 +304,11 @@ if (-not $SkipBuild) {
 }
 
 # ================================================================
-# ETAPE 7 - Installation de serve
+# ETAPE 7 - Scripts de lancement (architecture single-port)
 # ================================================================
-Write-Step "ETAPE 7 - Serveur de fichiers statiques"
-Write-Info "Installation de serve..."
-& npm install -g serve 2>&1 | Out-Null
-Write-OK "serve installe."
+Write-Step "ETAPE 7 - Creation des scripts de lancement"
 
-# ================================================================
-# ETAPE 8 - Scripts de lancement
-# ================================================================
-Write-Step "ETAPE 8 - Creation des scripts de lancement"
-
-# --- start.bat ---
+# --- start.bat (production - un seul processus) ---
 $startLines = @()
 $startLines += "@echo off"
 $startLines += "title Weight Stream"
@@ -328,26 +316,27 @@ $startLines += "cd /d `"%~dp0`""
 $startLines += "echo ============================================================"
 $startLines += "echo   Weight Stream - Lancement Production"
 $startLines += "echo   Auteur: NETPROCESS (https://netprocess.ma)"
+$startLines += "echo   Architecture: Single-port (Express sert le frontend)"
 $startLines += "echo ============================================================"
 $startLines += "echo."
 $startLines += "if not exist `"server\dist\index.js`" ("
-$startLines += "    echo [ERREUR] Build backend introuvable."
+$startLines += "    echo [ERREUR] Build backend introuvable. Lancez le build d abord."
 $startLines += "    pause"
 $startLines += "    exit /b 1"
 $startLines += ")"
 $startLines += "if not exist `"dist\index.html`" ("
-$startLines += "    echo [ERREUR] Build frontend introuvable."
+$startLines += "    echo [ERREUR] Build frontend introuvable. Lancez le build d abord."
 $startLines += "    pause"
 $startLines += "    exit /b 1"
 $startLines += ")"
-$startLines += ("echo [INFO] Demarrage du Backend sur le port " + $BackendPort + "...")
-$startLines += "start `"WeightStream-Backend`" cmd /k `"cd /d `"`"%~dp0server`"`" && node dist\index.js`""
-$startLines += "timeout /t 3 /nobreak >nul"
-$startLines += ("echo [INFO] Demarrage du Frontend sur le port " + $FrontendPort + "...")
-$startLines += ("start `"WeightStream-Frontend`" cmd /k `"cd /d `"`"%~dp0`"`" && npx --yes serve -s dist -l " + $FrontendPort + "`"")
+$startLines += ("echo [INFO] Demarrage de Weight Stream sur le port " + $AppPort + "...")
+$startLines += "echo [INFO] Le backend Express sert aussi le frontend (single-port)."
 $startLines += "echo."
-$startLines += ("echo   Application disponible sur : http://localhost:" + $FrontendPort)
+$startLines += ("echo   Application : http://localhost:" + $AppPort)
+$startLines += ("echo   API Health  : http://localhost:" + $AppPort + "/api/health")
 $startLines += "echo."
+$startLines += "cd /d `"%~dp0server`""
+$startLines += "node dist\index.js"
 $startLines += "pause"
 
 $startBatPath = Join-Path $AppDirFull "start.bat"
@@ -362,14 +351,14 @@ $devLines += "echo ============================================================"
 $devLines += "echo   Weight Stream - Mode Developpement"
 $devLines += "echo ============================================================"
 $devLines += "echo."
-$devLines += ("echo [INFO] Backend dev sur port " + $BackendPort + "...")
+$devLines += ("echo [INFO] Backend dev sur port " + $AppPort + "...")
 $devLines += "start `"WeightStream-Backend-Dev`" cmd /k `"cd /d `"`"%~dp0server`"`" && npm run dev`""
 $devLines += "timeout /t 3 /nobreak >nul"
-$devLines += ("echo [INFO] Frontend dev sur port " + $FrontendPort + "...")
+$devLines += "echo [INFO] Frontend dev sur port 5173..."
 $devLines += "start `"WeightStream-Frontend-Dev`" cmd /k `"cd /d `"`"%~dp0`"`" && npm run dev`""
 $devLines += "echo."
-$devLines += ("echo   Frontend : http://localhost:" + $FrontendPort)
-$devLines += ("echo   Backend  : http://localhost:" + $BackendPort)
+$devLines += "echo   Frontend : http://localhost:5173"
+$devLines += ("echo   Backend  : http://localhost:" + $AppPort)
 $devLines += "echo."
 $devLines += "pause"
 
@@ -380,36 +369,34 @@ $devBatPath = Join-Path $AppDirFull "start-dev.bat"
 $stopLines = @()
 $stopLines += "@echo off"
 $stopLines += "echo [INFO] Arret des services Weight Stream..."
-$stopLines += "taskkill /FI `"WINDOWTITLE eq WeightStream-Backend*`" /F >nul 2>nul"
-$stopLines += "taskkill /FI `"WINDOWTITLE eq WeightStream-Frontend*`" /F >nul 2>nul"
+$stopLines += "taskkill /FI `"WINDOWTITLE eq WeightStream*`" /F >nul 2>nul"
 $stopLines += "echo [OK] Services arretes."
 $stopLines += "pause"
 
 $stopBatPath = Join-Path $AppDirFull "stop.bat"
 [System.IO.File]::WriteAllLines($stopBatPath, $stopLines, [System.Text.Encoding]::ASCII)
 
-# --- start-background.bat (lancement silencieux pour demarrage auto) ---
+# --- start-background.bat (lancement silencieux pour demarrage auto - UN SEUL processus) ---
 $bgLines = @()
 $bgLines += "@echo off"
 $bgLines += "cd /d `"%~dp0`""
 $bgLines += "if not exist `"server\dist\index.js`" exit /b 1"
 $bgLines += "if not exist `"dist\index.html`" exit /b 1"
-$bgLines += ("start /min `"WeightStream-Backend`" cmd /c `"cd /d `"`"%~dp0server`"`" && node dist\index.js`"")
-$bgLines += "timeout /t 5 /nobreak >nul"
-$bgLines += ("start /min `"WeightStream-Frontend`" cmd /c `"cd /d `"`"%~dp0`"`" && npx --yes serve -s dist -l " + $FrontendPort + "`"")
+$bgLines += "cd /d `"%~dp0server`""
+$bgLines += "start /min `"WeightStream`" cmd /c `"node dist\index.js`""
 
 $bgBatPath = Join-Path $AppDirFull "start-background.bat"
 [System.IO.File]::WriteAllLines($bgBatPath, $bgLines, [System.Text.Encoding]::ASCII)
 
-Write-OK "start.bat            - Production (interactif)"
-Write-OK "start-background.bat - Production (silencieux)"
-Write-OK "start-dev.bat        - Developpement"
+Write-OK "start.bat            - Production (interactif, single-port)"
+Write-OK "start-background.bat - Production (silencieux, demarrage auto)"
+Write-OK "start-dev.bat        - Developpement (2 processus)"
 Write-OK "stop.bat             - Arret"
 
 # ================================================================
-# ETAPE 9 - Demarrage automatique avec Windows
+# ETAPE 8 - Demarrage automatique avec Windows
 # ================================================================
-Write-Step "ETAPE 9 - Demarrage automatique avec Windows"
+Write-Step "ETAPE 8 - Demarrage automatique avec Windows"
 
 $taskName = "WeightStream-AutoStart"
 
@@ -426,7 +413,7 @@ $trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Demarrage automatique de Weight Stream (Backend + Frontend) - NETPROCESS" | Out-Null
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Demarrage automatique de Weight Stream (single-port Express) - NETPROCESS" | Out-Null
 
 if ($?) {
     Write-OK ("Tache planifiee '" + $taskName + "' creee avec succes.")
@@ -449,9 +436,11 @@ Write-Host "============================================================" -Foreg
 Write-Host "  Installation terminee avec succes !"                        -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Application  : Weight Stream v4.2.0"                        -ForegroundColor Cyan
+Write-Host "  Application  : Weight Stream v5.0.0"                        -ForegroundColor Cyan
 Write-Host "  Auteur       : NETPROCESS (https://netprocess.ma)"          -ForegroundColor Cyan
+Write-Host "  Dev          : Mohammed NABET (+212 661 550 618)"           -ForegroundColor Cyan
 Write-Host ("  Repertoire   : " + $AppDirFull)                            -ForegroundColor Cyan
+Write-Host "  Architecture : Single-port (Express sert le frontend)"      -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Base de donnees MySQL :" -ForegroundColor Yellow
 Write-Host ("    Base : " + $DbName)
@@ -473,6 +462,10 @@ Write-Host "  Demarrage automatique :" -ForegroundColor Yellow
 Write-Host ("    Tache planifiee : " + $taskName)
 Write-Host "    Statut          : Actif (au demarrage de Windows)"
 Write-Host ""
-Write-Host ("  Acces : http://" + $ServerName + ":" + $FrontendPort) -ForegroundColor Green
-Write-Host "  Le premier utilisateur inscrit deviendra administrateur." -ForegroundColor Green
+Write-Host ("  Acces : http://" + $ServerName + ":" + $AppPort) -ForegroundColor Green
+Write-Host "  Compte admin par defaut : m.nabet@netprocess.ma / netprocess" -ForegroundColor Green
+Write-Host ""
+Write-Host "  NOTE : Un seul port (" + $AppPort + ") pour tout !" -ForegroundColor Yellow
+Write-Host "  Le backend Express sert aussi les fichiers du frontend." -ForegroundColor Yellow
+Write-Host "  Plus besoin de 'serve' ni de double port." -ForegroundColor Yellow
 Write-Host ""
