@@ -215,6 +215,10 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
         setActiveTaskId('');
         setRecentItems([]);
         setShowCreateTask(false);
+        // Exit fullscreen when task ends
+        if (document.fullscreenElement) {
+          document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+        }
       }
       await loadTasks(lineId);
       const labels: Record<string, string> = {
