@@ -170,6 +170,34 @@ if (-not (Test-Command "mysql")) {
     Print-Error "MySQL n'est pas installé ou n'est pas dans le PATH. Installez MySQL Server 8.0+ et ajoutez le client mysql.exe au PATH."
     exit 1
 }
+Print-Step "Détection du client MySQL"
+
+$mysqlCmd = Get-Command mysql -ErrorAction SilentlyContinue
+
+if ($mysqlCmd) {
+    $mysql = $mysqlCmd.Source
+} else {
+    $possiblePaths = @(
+        "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
+        "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
+        "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe"
+    )
+
+    foreach ($path in $possiblePaths) {
+        if (Test-Path $path) {
+            $mysql = $path
+            break
+        }
+    }
+}
+
+if (-not $mysql) {
+    Print-Error "mysql.exe introuvable. Vérifiez l'installation ou le PATH."
+    exit
+}
+
+Print-Success "MySQL client détecté : $mysql"
+
 try {
     $MysqlVersion = & mysql --version
     Print-Success "MySQL est installé ($MysqlVersion)"
