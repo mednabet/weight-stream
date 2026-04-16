@@ -2,12 +2,10 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { useSensorData } from '@/hooks/useSensorData';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   CheckCircle, XCircle, Scale, Package, ArrowLeft,
-  Printer, AlertTriangle, Info, Clock, TrendingUp, Layers, BarChart3, Undo2, Activity
+  Printer, AlertTriangle, Info, Clock, TrendingUp, Layers, BarChart3, Undo2, Activity, Save
 } from 'lucide-react';
 
 interface Line {
@@ -193,7 +191,8 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
     }
   }, [activeTaskId]);
 
-  const confirmPallet = async (conformityStatus: 'conforme' | 'non_conforme') => {
+  /* ── Enregistrer palette (plus de conforme/non conforme) ── */
+  const registerPallet = async () => {
     if (!activeTaskId) return;
     const weight = sensor.weight.value || 0;
     if (!weight) {
@@ -209,11 +208,10 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
         task_id: activeTaskId,
         units_count: unitsCount,
         weight,
-        status: conformityStatus,
+        status: 'conforme', // toujours conforme par défaut (pas de logique conforme/non conforme pour les palettes)
       });
       await loadPallets(activeTaskId);
-      const label = conformityStatus === 'conforme' ? 'Conforme' : 'Non conforme';
-      showMessage(`Palette ${label} — ${weight.toFixed(3)} kg — ${unitsCount} unités`, conformityStatus === 'conforme' ? 'success' : 'warning');
+      showMessage(`Palette enregistrée — ${weight.toFixed(3)} kg — ${unitsCount} unités`, 'success');
       if (result && (result as any).id) {
         try {
           const ticket = await apiClient.getPalletTicket((result as any).id);
@@ -257,9 +255,6 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
           .row .label { font-weight: bold; }
           .divider { border-top: 1px dashed #000; margin: 8px 0; }
           .big { font-size: 24px; text-align: center; font-weight: bold; margin: 10px 0; }
-          .status { text-align: center; padding: 8px; margin: 10px 0; font-size: 16px; font-weight: bold; border: 2px solid; }
-          .conforme { border-color: green; color: green; }
-          .non_conforme { border-color: red; color: red; }
           .footer { text-align: center; font-size: 11px; margin-top: 15px; color: #666; }
           @media print { body { padding: 5px; } }
         </style>
@@ -278,25 +273,25 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
         <div class="row"><span class="label">Unités:</span><span>${pallet.units_count}</span></div>
         <div class="divider"></div>
         <div class="big">${Number(pallet.weight).toFixed(3)} kg</div>
-        <div class="status ${pallet.status}">${pallet.status === 'conforme' ? 'CONFORME' : 'NON CONFORME'}</div>
         <div class="divider"></div>
         <div class="row"><span class="label">Opérateur:</span><span>${pallet.operator_name || user?.name || '-'}</span></div>
         <div class="footer">
-          <p>Weight Stream — NETPROCESS</p>
-          <p>https://netprocess.ma</p>
+          <p>NETPROCESS - Production Manager</p>
+          <p>${new Date().toLocaleDateString('fr-FR')}</p>
         </div>
-        <script>
-          window.onload = function() { window.print(); };
-        </script>
+        <script>window.onload = function() { window.print(); }</script>
       </body>
       </html>
     `);
     ticketWindow.document.close();
   };
 
-  // === Weight status styling ===
-  const sensorStatus = sensor.weight.status;
-  const isStable = sensorStatus === 'stable';
+  // === Sensor status ===
+  const sensorStatus = sensor.weight.isStable ? 'stable' :
+    sensor.weight.value > 0 ? 'unstable' :
+    sensor.error ? 'error' : 'offline';
+
+  const isStable = sensorStatus === 'stable' && sensor.weight.value > 0;
   const isUnstable = sensorStatus === 'unstable';
   const isError = sensorStatus === 'error';
 
@@ -438,19 +433,19 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
           >
             {summary ? (
               <div className="flex flex-col gap-2 p-3">
-                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-emerald-500/[0.08] border border-emerald-500/10">
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-violet-500/[0.08] border border-violet-500/10">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs text-emerald-400/80 font-medium">Palettes OK</span>
+                    <Package className="w-4 h-4 text-violet-400" />
+                    <span className="text-xs text-violet-400/80 font-medium">Palettes</span>
                   </div>
-                  <span className="text-lg font-bold text-emerald-400 font-mono">{summary.total_conformes}</span>
+                  <span className="text-lg font-bold text-violet-400 font-mono">{summary.total_pallets}</span>
                 </div>
-                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-rose-500/[0.08] border border-rose-500/10">
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-blue-500/[0.08] border border-blue-500/10">
                   <div className="flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-rose-400" />
-                    <span className="text-xs text-rose-400/80 font-medium">Palettes NOK</span>
+                    <Layers className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs text-blue-400/80 font-medium">Unités cond.</span>
                   </div>
-                  <span className="text-lg font-bold text-rose-400 font-mono">{summary.total_non_conformes}</span>
+                  <span className="text-lg font-bold text-blue-400 font-mono">{summary.total_units_packed}</span>
                 </div>
                 <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${
                   summary.remaining_units === 0 ? 'bg-emerald-500/[0.08] border-emerald-500/10' :
@@ -458,7 +453,7 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
                   'bg-rose-500/[0.08] border-rose-500/10'
                 }`}>
                   <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-slate-400" />
+                    <TrendingUp className="w-4 h-4 text-slate-400" />
                     <span className="text-xs text-slate-400 font-medium">Reste</span>
                   </div>
                   <span className={`text-lg font-bold font-mono ${
@@ -560,24 +555,16 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
               </div>
             )}
 
-            {/* ── Boutons Conforme / Non conforme intégrés sous le poids ── */}
+            {/* ── Bouton unique "Enregistrer palette" ── */}
             {activeTask && (
-              <div className="mt-5 flex gap-4 relative z-10 w-full px-6">
+              <div className="mt-5 relative z-10 w-full px-6">
                 <button
-                  onClick={() => confirmPallet('conforme')}
+                  onClick={registerPallet}
                   disabled={!isStable}
-                  className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
+                  className="w-full h-20 flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-violet-600/90 to-violet-700/90 border border-violet-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-violet-500/90 hover:to-violet-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-violet-900/30"
                 >
-                  <CheckCircle className="w-8 h-8" />
-                  <span className="text-lg font-bold tracking-tight">Conforme</span>
-                </button>
-                <button
-                  onClick={() => confirmPallet('non_conforme')}
-                  disabled={!isStable}
-                  className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
-                >
-                  <XCircle className="w-8 h-8" />
-                  <span className="text-lg font-bold tracking-tight">Non conforme</span>
+                  <Save className="w-8 h-8" />
+                  <span className="text-xl font-bold tracking-tight">Enregistrer palette</span>
                 </button>
               </div>
             )}
@@ -622,28 +609,18 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
             {pallets.slice(0, 20).map((pallet) => (
               <div
                 key={pallet.id}
-                className={`flex-shrink-0 w-28 rounded-xl border px-2.5 py-2 flex flex-col items-center justify-center transition-all cursor-pointer hover:scale-[1.02] ${
-                  pallet.status === 'conforme'
-                    ? 'border-emerald-500/15 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]'
-                    : 'border-rose-500/15 bg-rose-500/[0.04] hover:bg-rose-500/[0.08]'
-                }`}
+                className="flex-shrink-0 w-28 rounded-xl border border-violet-500/15 bg-violet-500/[0.04] hover:bg-violet-500/[0.08] px-2.5 py-2 flex flex-col items-center justify-center transition-all cursor-pointer hover:scale-[1.02]"
                 onClick={() => printTicket(pallet)}
               >
                 <div className="flex items-center gap-1 mb-0.5">
                   <span className="text-[9px] text-slate-500 font-mono">P{pallet.pallet_number}</span>
                   <span className="text-[9px] text-slate-600">{pallet.units_count}u</span>
                 </div>
-                <span className={`text-sm font-bold font-mono ${
-                  pallet.status === 'conforme' ? 'text-emerald-400' : 'text-rose-400'
-                }`}>
+                <span className="text-sm font-bold font-mono text-violet-400">
                   {Number(pallet.weight).toFixed(3)}
                 </span>
                 <div className="flex items-center gap-1 mt-0.5">
-                  <span className={`text-[9px] font-semibold ${
-                    pallet.status === 'conforme' ? 'text-emerald-500/60' : 'text-rose-500/60'
-                  }`}>
-                    {pallet.status === 'conforme' ? 'OK' : 'NOK'}
-                  </span>
+                  <span className="text-[9px] font-semibold text-violet-500/60">kg</span>
                   <Printer className="w-2.5 h-2.5 text-slate-600" />
                 </div>
               </div>
@@ -716,16 +693,6 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
               <div className="flex justify-between items-center px-3 py-2 rounded-xl bg-white/[0.03]">
                 <span className="text-sm text-slate-400">Poids</span>
                 <span className="text-lg font-mono font-bold text-violet-400">{Number(showTicket.weight).toFixed(3)} kg</span>
-              </div>
-              <div className="flex justify-between items-center px-3 py-2 rounded-xl bg-white/[0.03]">
-                <span className="text-sm text-slate-400">Statut</span>
-                <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                  showTicket.status === 'conforme'
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
-                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/20'
-                }`}>
-                  {showTicket.status === 'conforme' ? 'CONFORME' : 'NON CONFORME'}
-                </span>
               </div>
             </div>
 
