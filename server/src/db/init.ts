@@ -174,6 +174,33 @@ export async function initDatabase() {
       );
     }
 
+    // Create default admin account if no users exist
+    const [userRows]: any = await conn.query('SELECT COUNT(*) as count FROM users');
+    if (parseInt(userRows[0].count) === 0) {
+      const { v4: uuidv4 } = await import('uuid');
+      const adminId = uuidv4();
+      const defaultEmail = 'm.nabet@netprocess.ma';
+      const defaultPassword = 'netprocess';
+      const { default: bcrypt } = await import('bcryptjs') as any;
+      const passwordHash = bcrypt.hashSync(defaultPassword, 12);
+
+      await conn.query(
+        'INSERT INTO users (id, email, password_hash, is_active) VALUES (?, ?, ?, ?)',
+        [adminId, defaultEmail, passwordHash, true]
+      );
+
+      // Assign all roles: admin, supervisor, operator
+      const roles = ['admin', 'supervisor', 'operator'];
+      for (const role of roles) {
+        await conn.query(
+          'INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)',
+          [uuidv4(), adminId, role]
+        );
+      }
+
+      console.log('Default admin account created: ' + defaultEmail);
+    }
+
     console.log('Database initialized successfully (MySQL)');
   } finally {
     conn.release();

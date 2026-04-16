@@ -46,7 +46,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     }
 
     const roles = await query<any[]>(
-      'SELECT role FROM user_roles WHERE user_id = ? ORDER BY role LIMIT 1',
+      "SELECT role FROM user_roles WHERE user_id = ? ORDER BY FIELD(role, 'admin', 'supervisor', 'operator') LIMIT 1",
       [user.id]
     );
 
