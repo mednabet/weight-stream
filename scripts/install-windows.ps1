@@ -180,7 +180,7 @@ if ($mysqlCmd) {
     $possiblePaths = @(
         "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
         "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
-        "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe"
+        "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
     )
 
     foreach ($path in $possiblePaths) {
