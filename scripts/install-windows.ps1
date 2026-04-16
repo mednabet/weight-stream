@@ -90,17 +90,20 @@ function Resolve-Executable {
         [string[]]$FallbackPaths = @()
     )
 
+    # Test via PATH
     $cmd = Get-Command $Name -ErrorAction SilentlyContinue
     if ($cmd -and $cmd.Source) {
         return $cmd.Source.ToString().Trim()
     }
 
+    # Test fallback
     foreach ($path in $FallbackPaths) {
         if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path $path)) {
             return (Resolve-Path $path).Path
         }
     }
 
+    # Toujours retourner $null explicitement
     return $null
 }
 
@@ -257,12 +260,15 @@ if (-not $GitExe) {
 $GitVersion = (& $GitExe --version)
 Print-Success "Git détecté : $GitVersion"
 
-$MysqlExe = Resolve-Executable -Name "mysql.exe" -FallbackPaths @(
-    "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
-    "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
-    "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe",
-    "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
-)
+$MysqlExe = "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
+
+if ([string]::IsNullOrWhiteSpace($MysqlExe)) {
+    Print-Error "ERREUR CRITIQUE : mysql.exe non trouvé malgré la détection précédente"
+    exit 1
+}
+
+Write-Host "DEBUG MYSQL = [$MysqlExe]" -ForegroundColor Yellow
+
 if (-not $MysqlExe) {
     Print-Error "mysql.exe introuvable."
     exit 1
