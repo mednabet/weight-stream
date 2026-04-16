@@ -165,11 +165,6 @@ try {
     exit 1
 }
 
-# Vérifier MySQL
-if (-not (Test-Command "mysql")) {
-    Print-Error "MySQL n'est pas installé ou n'est pas dans le PATH. Installez MySQL Server 8.0+ et ajoutez le client mysql.exe au PATH."
-    exit 1
-}
 Print-Step "Détection du client MySQL"
 
 $mysqlCmd = Get-Command mysql -ErrorAction SilentlyContinue
@@ -180,6 +175,7 @@ if ($mysqlCmd) {
     $possiblePaths = @(
         "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
         "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
+        "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe",
         "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
     )
 
@@ -191,20 +187,12 @@ if ($mysqlCmd) {
     }
 }
 
-if (-not $mysql) {
+if ([string]::IsNullOrWhiteSpace($mysql)) {
     Print-Error "mysql.exe introuvable. Vérifiez l'installation ou le PATH."
-    exit
+    exit 1
 }
 
 Print-Success "MySQL client détecté : $mysql"
-
-try {
-    $MysqlVersion = & mysql --version
-    Print-Success "MySQL est installé ($MysqlVersion)"
-} catch {
-    Print-Error "Impossible d'exécuter mysql.exe."
-    exit 1
-}
 
 Print-Step "Configuration de la base de données"
 Write-Host "Veuillez entrer le mot de passe root de MySQL pour créer la base de données."
@@ -214,18 +202,13 @@ $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($MysqlRootP
 
 try {
     $RootPassPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($BSTR)
-} finally {
+}
+finally {
     if ($BSTR -ne [IntPtr]::Zero) {
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($RootPassPlain)) {
-    Print-Error "Le mot de passe root MySQL ne peut pas être vide."
-    exit 1
-}
-
-# Générer un mot de passe aléatoire pour l'utilisateur de l'application
 $DbPass = New-RandomPassword -Length 16
 
 $SqlScript = @"
@@ -241,7 +224,7 @@ $SqlScript | Out-File -FilePath $SqlFile -Encoding utf8
 
 try {
     Print-Step "Test de connexion à MySQL"
-    $testResult = Invoke-ExternalCommand -FilePath "mysql" -Arguments @(
+    $testResult = Invoke-ExternalCommand -FilePath $mysql -Arguments @(
         "-u", "root",
         "--password=$RootPassPlain",
         "-e", "SELECT VERSION();"
@@ -249,31 +232,23 @@ try {
 
     if ($testResult.ExitCode -ne 0) {
         Print-Error "Connexion MySQL root échouée."
-        if (-not [string]::IsNullOrWhiteSpace($testResult.StdErr)) {
-            Write-Host $testResult.StdErr -ForegroundColor $ColorError
-        }
-        if (-not [string]::IsNullOrWhiteSpace($testResult.StdOut)) {
-            Write-Host $testResult.StdOut -ForegroundColor $ColorError
-        }
+        Write-Host $testResult.StdErr -ForegroundColor Red
+        Write-Host $testResult.StdOut -ForegroundColor Red
         exit 1
     }
 
     Print-Success "Connexion root MySQL validée."
 
     Print-Step "Création de la base et de l'utilisateur applicatif"
-    $importResult = Invoke-ExternalCommand -FilePath "mysql" -Arguments @(
+    $importResult = Invoke-ExternalCommand -FilePath $mysql -Arguments @(
         "-u", "root",
         "--password=$RootPassPlain"
     ) -StdInFile $SqlFile
 
     if ($importResult.ExitCode -ne 0) {
         Print-Error "Échec réel de la configuration de la base de données."
-        if (-not [string]::IsNullOrWhiteSpace($importResult.StdErr)) {
-            Write-Host $importResult.StdErr -ForegroundColor $ColorError
-        }
-        if (-not [string]::IsNullOrWhiteSpace($importResult.StdOut)) {
-            Write-Host $importResult.StdOut -ForegroundColor $ColorError
-        }
+        Write-Host $importResult.StdErr -ForegroundColor Red
+        Write-Host $importResult.StdOut -ForegroundColor Red
         exit 1
     }
 
@@ -281,7 +256,6 @@ try {
 }
 finally {
     Remove-Item -Path $SqlFile -ErrorAction SilentlyContinue
-    $RootPassPlain = $null
 }
 
 Print-Step "Déploiement de l'application"
