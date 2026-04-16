@@ -96,11 +96,11 @@ class ApiClient {
   }
 
   // Auth
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(login: string, password: string): Promise<AuthResponse> {
     try {
       const result = await this.request<AuthResponse>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: login, password }),
       });
       this.token = result.access_token;
       localStorage.setItem('auth_token', result.access_token);
@@ -113,11 +113,11 @@ class ApiClient {
     }
   }
 
-  async signUp(email: string, password: string): Promise<AuthResponse> {
+  async signUp(login: string, password: string): Promise<AuthResponse> {
     try {
       const result = await this.request<AuthResponse>('/auth/signup', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: login, password }),
       });
       this.token = result.access_token;
       localStorage.setItem('auth_token', result.access_token);

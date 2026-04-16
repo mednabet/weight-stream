@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/connection.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
-import { validatePassword, validateEmail } from '../middleware/validation.js';
+import { validatePassword, validateLogin } from '../middleware/validation.js';
 
 export const usersRouter = Router();
 usersRouter.use(authenticate);
@@ -33,19 +33,19 @@ usersRouter.get('/', requireRole('admin', 'supervisor'), async (req: AuthRequest
 
 // Create user (admin/supervisor only)
 usersRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthRequest, res: Response) => {
-  const { email, password, role } = req.body;
+  const { email: login, password, role } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email et mot de passe requis' });
+  if (!login || !password) {
+    return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
   }
 
-  // Validate email format
-  const emailValidation = validateEmail(email);
-  if (!emailValidation.valid) {
-    return res.status(400).json({ error: emailValidation.error });
+  // Validate login format (simple identifier, min 2 chars)
+  const loginValidation = validateLogin(login);
+  if (!loginValidation.valid) {
+    return res.status(400).json({ error: loginValidation.error });
   }
 
-  // Validate password strength
+  // Validate password (min 3 chars)
   const passwordValidation = validatePassword(password);
   if (!passwordValidation.valid) {
     return res.status(400).json({ error: passwordValidation.error });
@@ -64,11 +64,11 @@ usersRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
   try {
     const existing = await query<any[]>(
       'SELECT id FROM users WHERE email = ?',
-      [email]
+      [login]
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'Email déjà utilisé' });
+      return res.status(400).json({ error: 'Identifiant déjà utilisé' });
     }
 
     const userId = uuidv4();
@@ -76,7 +76,7 @@ usersRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
 
     await query(
       'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
-      [userId, email, passwordHash]
+      [userId, login, passwordHash]
     );
 
     await query(
@@ -84,7 +84,7 @@ usersRouter.post('/', requireRole('admin', 'supervisor'), async (req: AuthReques
       [uuidv4(), userId, role || 'operator']
     );
 
-    res.json({ id: userId, email, role: role || 'operator' });
+    res.json({ id: userId, email: login, role: role || 'operator' });
   } catch (err) {
     console.error('Create user error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -142,7 +142,7 @@ usersRouter.put('/:id/password', requireRole('admin', 'supervisor'), async (req:
     return res.status(400).json({ error: 'Mot de passe requis' });
   }
 
-  // Validate password strength
+  // Validate password (min 3 chars)
   const passwordValidation = validatePassword(password);
   if (!passwordValidation.valid) {
     return res.status(400).json({ error: passwordValidation.error });

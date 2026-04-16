@@ -11,7 +11,7 @@ import {
   Trash2, 
   Power, 
   PowerOff,
-  Mail,
+  User as UserIcon,
   Calendar,
   Clock,
   Loader2,
@@ -58,12 +58,12 @@ export function OperatorsManagement() {
     open: boolean;
     userId: string;
     action: 'ban' | 'unban' | 'delete';
-    email: string;
+    email: string; // login identifier
   } | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{
     open: boolean;
     userId: string;
-    email: string;
+    email: string; // login identifier
   } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
@@ -83,10 +83,10 @@ export function OperatorsManagement() {
   };
 
   const confirmResetPassword = async () => {
-    if (!resetPasswordDialog || newPassword.length < 6) {
+    if (!resetPasswordDialog || newPassword.length < 3) {
       toast({
         title: 'Mot de passe invalide',
-        description: 'Le mot de passe doit contenir au moins 6 caractères.',
+        description: 'Le mot de passe doit contenir au moins 3 caractères.',
         variant: 'destructive',
       });
       return;
@@ -259,7 +259,7 @@ export function OperatorsManagement() {
               <Input
                 id="new-password"
                 type="password"
-                placeholder="Minimum 6 caractères"
+                placeholder="Minimum 3 caractères"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
@@ -271,7 +271,7 @@ export function OperatorsManagement() {
             </Button>
             <Button 
               onClick={confirmResetPassword} 
-              disabled={isResettingPassword || newPassword.length < 6}
+              disabled={isResettingPassword || newPassword.length < 3}
             >
               {isResettingPassword ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -315,7 +315,7 @@ export function OperatorsManagement() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-lg flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-muted-foreground" />
+                      <UserIcon className="w-4 h-4 text-muted-foreground" />
                       {op.email}
                     </span>
                     {op.banned ? (

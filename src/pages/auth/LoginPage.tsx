@@ -4,20 +4,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Factory, Mail, Lock, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { Factory, User, Lock, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
 
 const authSchema = z.object({
-  email: z.string().email('Email invalide'),
-  password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
+  login: z.string().min(2, 'L\'identifiant doit contenir au moins 2 caractères'),
+  password: z.string().min(3, 'Le mot de passe doit contenir au moins 3 caractères'),
 });
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login, role, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { login: doLogin, role, isAuthenticated, isLoading: authLoading } = useAuth();
   
-  const [email, setEmail] = useState('');
+  const [loginValue, setLoginValue] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,7 +37,7 @@ export function LoginPage() {
     setError(null);
 
     // Validate input
-    const validation = authSchema.safeParse({ email, password });
+    const validation = authSchema.safeParse({ login: loginValue, password });
     if (!validation.success) {
       setError(validation.error.errors[0].message);
       return;
@@ -46,7 +46,7 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      const result = await login(email, password);
+      const result = await doLogin(loginValue, password);
 
       if (!result.success) {
         setError(result.error || 'Erreur de connexion');
@@ -102,19 +102,19 @@ export function LoginPage() {
         {/* Login form */}
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           <div className="bg-card rounded-xl border border-border p-4 sm:p-6 space-y-4 sm:space-y-5">
-            {/* Email */}
+            {/* Login identifier */}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm sm:text-base">Email</Label>
+              <Label htmlFor="login" className="text-sm sm:text-base">Identifiant</Label>
               <div className="relative">
-                <Mail className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+                <User className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="votre@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="login"
+                  type="text"
+                  placeholder="Votre identifiant"
+                  value={loginValue}
+                  onChange={(e) => setLoginValue(e.target.value)}
                   className="h-12 sm:h-14 text-base sm:text-lg pl-10 sm:pl-12"
-                  autoComplete="email"
+                  autoComplete="username"
                   autoFocus
                 />
               </div>
@@ -128,7 +128,7 @@ export function LoginPage() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Entrez votre mot de passe"
+                  placeholder="Votre mot de passe"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-12 sm:h-14 text-base sm:text-lg pl-10 sm:pl-12"
@@ -150,7 +150,7 @@ export function LoginPage() {
           <Button
             type="submit"
             size="lg"
-            disabled={isLoading || !email || !password}
+            disabled={isLoading || !loginValue || !password}
             className="w-full h-12 sm:h-14 text-base sm:text-lg"
           >
             {isLoading ? (

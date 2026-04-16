@@ -25,17 +25,16 @@ import { z } from 'zod';
 import { UserRole } from '@/types/production';
 
 const createUserSchema = z.object({
-  email: z.string().email('Adresse email invalide'),
-  password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
+  login: z.string().min(2, 'L\'identifiant doit contenir au moins 2 caractères'),
+  password: z.string().min(3, 'Le mot de passe doit contenir au moins 3 caractères'),
   role: z.enum(['operator', 'supervisor'] as const),
 });
 
 // Messages d'erreur en français
 const USER_ERROR_MESSAGES: Record<string, string> = {
-  'Email already exists': 'Cette adresse email est déjà utilisée.',
-  'Email déjà utilisé': 'Cette adresse email est déjà utilisée.',
-  'Invalid email': 'Adresse email invalide.',
-  'Password too short': 'Le mot de passe doit contenir au moins 6 caractères.',
+  'Identifiant déjà utilisé': 'Cet identifiant est déjà utilisé.',
+  'Email déjà utilisé': 'Cet identifiant est déjà utilisé.',
+  'Email already exists': 'Cet identifiant est déjà utilisé.',
   'Unauthorized': 'Vous n\'êtes pas autorisé à effectuer cette action.',
   'Failed to fetch': 'Impossible de contacter le serveur. Vérifiez votre connexion.',
 };
@@ -61,7 +60,7 @@ interface CreateUserDialogProps {
 
 export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRole = 'operator' }: CreateUserDialogProps) {
   const { role: currentUserRole } = useAuth();
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'operator' | 'supervisor'>(defaultRole);
 
@@ -78,7 +77,7 @@ export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRol
     e.preventDefault();
     setError(null);
 
-    const validation = createUserSchema.safeParse({ email, password, role });
+    const validation = createUserSchema.safeParse({ login, password, role });
     if (!validation.success) {
       setError(validation.error.errors[0].message);
       return;
@@ -93,16 +92,16 @@ export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRol
     setIsLoading(true);
 
     try {
-      // Create user via API client
-      await apiClient.createUser({ email, password, role });
+      // Create user via API client (sends as "email" field for backward compat)
+      await apiClient.createUser({ email: login, password, role });
 
       toast({
         title: 'Utilisateur créé',
-        description: `${email} a été créé avec le rôle ${role === 'operator' ? 'opérateur' : 'superviseur'}`,
+        description: `${login} a été créé avec le rôle ${role === 'operator' ? 'opérateur' : 'superviseur'}`,
       });
 
       // Reset form
-      setEmail('');
+      setLogin('');
       setPassword('');
       setRole('operator');
       onOpenChange(false);
@@ -115,7 +114,7 @@ export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRol
   };
 
   const handleClose = () => {
-    setEmail('');
+    setLogin('');
     setPassword('');
     setRole('operator');
     setError(null);
@@ -139,13 +138,13 @@ export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRol
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="new-email">Email</Label>
+            <Label htmlFor="new-login">Identifiant</Label>
             <Input
-              id="new-email"
-              type="email"
-              placeholder="email@exemple.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="new-login"
+              type="text"
+              placeholder="ex: ahmed, op1, superviseur1..."
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
               autoComplete="off"
             />
           </div>
@@ -155,7 +154,7 @@ export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRol
             <Input
               id="new-password"
               type="password"
-              placeholder="Minimum 6 caractères"
+              placeholder="Minimum 3 caractères"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
@@ -187,7 +186,7 @@ export function CreateUserDialog({ open, onOpenChange, onUserCreated, defaultRol
             <Button type="button" variant="outline" onClick={handleClose}>
               Annuler
             </Button>
-            <Button type="submit" disabled={isLoading || !email || !password}>
+            <Button type="submit" disabled={isLoading || !login || !password}>
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />

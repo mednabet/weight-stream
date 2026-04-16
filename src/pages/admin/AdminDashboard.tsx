@@ -154,7 +154,7 @@ export function AdminDashboard() {
   };
 
   const handleResetPassword = async () => {
-    if (!resetPasswordUser || newPassword.length < 6 || newPassword.length > 128) return;
+    if (!resetPasswordUser || newPassword.length < 3 || newPassword.length > 128) return;
 
     setIsResettingPassword(true);
     try {
@@ -628,7 +628,7 @@ export function AdminDashboard() {
               <Input
                 id="new-password"
                 type="password"
-                placeholder="Minimum 6 caractères"
+                placeholder="Minimum 3 caractères"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
@@ -645,7 +645,7 @@ export function AdminDashboard() {
             </Button>
             <Button 
               onClick={handleResetPassword}
-              disabled={isResettingPassword || newPassword.length < 6 || newPassword.length > 128}
+              disabled={isResettingPassword || newPassword.length < 3 || newPassword.length > 128}
             >
               {isResettingPassword ? (
                 <>

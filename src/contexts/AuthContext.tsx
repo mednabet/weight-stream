@@ -10,18 +10,20 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (login: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (login: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
 
 // Messages d'erreur d'authentification en français
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  'Email ou mot de passe incorrect': 'Identifiants incorrects. Vérifiez votre email et mot de passe.',
+  'Identifiant ou mot de passe incorrect': 'Identifiants incorrects. Vérifiez votre identifiant et mot de passe.',
+  'Email ou mot de passe incorrect': 'Identifiants incorrects. Vérifiez votre identifiant et mot de passe.',
   'Compte désactivé': 'Votre compte a été désactivé. Contactez votre administrateur.',
-  'Email déjà utilisé': 'Cette adresse email est déjà utilisée.',
-  'Invalid login credentials': 'Identifiants incorrects. Vérifiez votre email et mot de passe.',
+  'Identifiant déjà utilisé': 'Cet identifiant est déjà utilisé.',
+  'Email déjà utilisé': 'Cet identifiant est déjà utilisé.',
+  'Invalid login credentials': 'Identifiants incorrects. Vérifiez votre identifiant et mot de passe.',
   'Failed to fetch': 'Impossible de contacter le serveur. Vérifiez votre connexion réseau.',
 };
 
@@ -76,9 +78,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshUser();
   }, [refreshUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (loginId: string, password: string) => {
     try {
-      const result = await apiClient.login(email, password);
+      const result = await apiClient.login(loginId, password);
       
       setState(prev => ({
         ...prev,
@@ -94,9 +96,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string) => {
+  const signUp = useCallback(async (loginId: string, password: string) => {
     try {
-      const result = await apiClient.signUp(email, password);
+      const result = await apiClient.signUp(loginId, password);
 
       setState(prev => ({
         ...prev,

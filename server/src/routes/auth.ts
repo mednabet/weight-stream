@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/connection.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
-import { validatePassword, validateEmail } from '../middleware/validation.js';
+import { validatePassword, validateLogin } from '../middleware/validation.js';
 
 export const authRouter = Router();
 
@@ -16,22 +16,22 @@ function getJwtSecret(): string {
   return secret;
 }
 
-// Login
+// Login — accepts simple identifier (login) + password
 authRouter.post('/login', async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const { email: login, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email et mot de passe requis' });
+  if (!login || !password) {
+    return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
   }
 
   try {
     const users = await query<any[]>(
       'SELECT id, email, password_hash, is_active FROM users WHERE email = ?',
-      [email]
+      [login]
     );
 
     if (users.length === 0) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+      return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
     }
 
     const user = users[0];
@@ -42,7 +42,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+      return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
     }
 
     const roles = await query<any[]>(
@@ -72,19 +72,19 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
 // Signup (only for initial admin setup — disabled after first admin exists)
 authRouter.post('/signup', async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const { email: login, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email et mot de passe requis' });
+  if (!login || !password) {
+    return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
   }
 
-  // Validate email format
-  const emailValidation = validateEmail(email);
-  if (!emailValidation.valid) {
-    return res.status(400).json({ error: emailValidation.error });
+  // Validate login format (simple identifier, min 2 chars)
+  const loginValidation = validateLogin(login);
+  if (!loginValidation.valid) {
+    return res.status(400).json({ error: loginValidation.error });
   }
 
-  // Validate password strength
+  // Validate password (min 3 chars)
   const passwordValidation = validatePassword(password);
   if (!passwordValidation.valid) {
     return res.status(400).json({ error: passwordValidation.error });
@@ -106,19 +106,19 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
 
     const existing = await query<any[]>(
       'SELECT id FROM users WHERE email = ?',
-      [email]
+      [login]
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'Email déjà utilisé' });
+      return res.status(400).json({ error: 'Identifiant déjà utilisé' });
     }
 
     const userId = uuidv4();
-    const passwordHash = await bcrypt.hash(password, 12); // Increased from 10 to 12 rounds
+    const passwordHash = await bcrypt.hash(password, 12);
 
     await query(
       'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
-      [userId, email, passwordHash]
+      [userId, login, passwordHash]
     );
 
     // First user becomes admin
@@ -135,7 +135,7 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
 
     res.json({
       access_token: token,
-      user: { id: userId, email, role: 'admin' }
+      user: { id: userId, email: login, role: 'admin' }
     });
   } catch (err) {
     console.error('Signup error:', err);

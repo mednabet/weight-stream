@@ -1,27 +1,21 @@
 import { z } from 'zod';
 
 /**
- * Password validation schema with strong requirements:
- * - Minimum 12 characters
- * - At least one uppercase letter
- * - At least one lowercase letter
- * - At least one digit
- * - At least one special character
+ * Password validation schema — simplified:
+ * - Minimum 3 characters only
  */
 export const passwordSchema = z.string()
-  .min(12, 'Le mot de passe doit contenir au moins 12 caractères')
-  .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
-  .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule')
-  .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre')
-  .regex(/[^A-Za-z0-9]/, 'Le mot de passe doit contenir au moins un caractère spécial');
+  .min(3, 'Le mot de passe doit contenir au moins 3 caractères');
 
 /**
- * Email validation schema
+ * Login validation schema — simple identifier (not necessarily an email):
+ * - Minimum 2 characters
+ * - Maximum 255 characters
  */
-export const emailSchema = z.string()
+export const loginSchema = z.string()
   .trim()
-  .email('Format d\'email invalide')
-  .max(255, 'L\'email ne doit pas dépasser 255 caractères');
+  .min(2, 'L\'identifiant doit contenir au moins 2 caractères')
+  .max(255, 'L\'identifiant ne doit pas dépasser 255 caractères');
 
 /**
  * Validate password and return result
@@ -35,12 +29,16 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 }
 
 /**
- * Validate email and return result
+ * Validate login identifier and return result
  */
-export function validateEmail(email: string): { valid: boolean; error?: string } {
-  const result = emailSchema.safeParse(email);
+export function validateLogin(login: string): { valid: boolean; error?: string } {
+  const result = loginSchema.safeParse(login);
   if (!result.success) {
     return { valid: false, error: result.error.errors[0].message };
   }
   return { valid: true };
 }
+
+// Keep backward compatibility alias
+export const emailSchema = loginSchema;
+export const validateEmail = validateLogin;
