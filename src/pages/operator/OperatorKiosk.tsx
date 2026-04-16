@@ -308,9 +308,13 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   // tolerance_min/max are DEVIATIONS from target (e.g. target=38, tol_min=2, tol_max=2 → range [36, 40])
   const toleranceBounds = useMemo(() => {
     if (!activeTask?.target_weight || !activeTask?.tolerance_min || !activeTask?.tolerance_max) return null;
+    const tw = Number(activeTask.target_weight);
+    const tmin = Number(activeTask.tolerance_min);
+    const tmax = Number(activeTask.tolerance_max);
+    if (isNaN(tw) || isNaN(tmin) || isNaN(tmax)) return null;
     return {
-      min: activeTask.target_weight - activeTask.tolerance_min,
-      max: activeTask.target_weight + activeTask.tolerance_max,
+      min: tw - tmin,
+      max: tw + tmax,
     };
   }, [activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
 
@@ -617,7 +621,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                       <TrendingUp className="w-3 h-3 text-slate-500" />
                       <span className="text-[11px] text-slate-400">Cible</span>
-                      <span className="text-[11px] font-mono font-semibold text-slate-200">{activeTask.target_weight}</span>
+                      <span className="text-[11px] font-mono font-semibold text-slate-200">{Number(activeTask.target_weight).toFixed(3)}</span>
                     </div>
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                       <span className="text-[11px] text-slate-500">Min</span>

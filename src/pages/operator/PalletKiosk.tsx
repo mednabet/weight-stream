@@ -311,9 +311,13 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
   // tolerance_min/max are DEVIATIONS from target (e.g. target=600, tol_min=10, tol_max=10 → range [590, 610])
   const palletToleranceBounds = useMemo(() => {
     if (!activeTask?.pallet_target_weight || !activeTask?.pallet_tolerance_min || !activeTask?.pallet_tolerance_max) return null;
+    const tw = Number(activeTask.pallet_target_weight);
+    const tmin = Number(activeTask.pallet_tolerance_min);
+    const tmax = Number(activeTask.pallet_tolerance_max);
+    if (isNaN(tw) || isNaN(tmin) || isNaN(tmax)) return null;
     return {
-      min: activeTask.pallet_target_weight - activeTask.pallet_tolerance_min,
-      max: activeTask.pallet_target_weight + activeTask.pallet_tolerance_max,
+      min: tw - tmin,
+      max: tw + tmax,
     };
   }, [activeTask?.pallet_target_weight, activeTask?.pallet_tolerance_min, activeTask?.pallet_tolerance_max]);
 
@@ -518,7 +522,7 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                   <TrendingUp className="w-3 h-3 text-slate-500" />
                   <span className="text-[11px] text-slate-400">Cible</span>
-                  <span className="text-[11px] font-mono font-semibold text-slate-200">{activeTask.pallet_target_weight}</span>
+                  <span className="text-[11px] font-mono font-semibold text-slate-200">{Number(activeTask.pallet_target_weight).toFixed(3)}</span>
                 </div>
                 {palletToleranceBounds && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
