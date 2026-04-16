@@ -88,13 +88,14 @@ function Invoke-ExternalCommand {
         throw "ERREUR : FilePath vide"
     }
 
-    $cmd = Get-Command $FilePath -ErrorAction SilentlyContinue
-
-    if (-not $cmd) {
-        throw "ERREUR : Commande introuvable -> $FilePath"
+    # 🔥 Détection correcte commande ou chemin
+    if (-not (Test-Path $FilePath)) {
+        $cmd = Get-Command $FilePath -ErrorAction SilentlyContinue
+        if (-not $cmd) {
+            throw "ERREUR : Commande introuvable -> $FilePath"
+        }
+        $FilePath = $cmd.Source
     }
-    
-    $FilePath = $cmd.Source
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $FilePath
