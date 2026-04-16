@@ -90,20 +90,17 @@ function Resolve-Executable {
         [string[]]$FallbackPaths = @()
     )
 
-    # Test via PATH
     $cmd = Get-Command $Name -ErrorAction SilentlyContinue
     if ($cmd -and $cmd.Source) {
         return $cmd.Source.ToString().Trim()
     }
 
-    # Test fallback
     foreach ($path in $FallbackPaths) {
         if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path $path)) {
             return (Resolve-Path $path).Path
         }
     }
 
-    # Toujours retourner $null explicitement
     return $null
 }
 
@@ -208,11 +205,12 @@ function Invoke-MySqlCommand {
     }
 
     $tmpCnf = Join-Path $env:TEMP "weight_stream_mysql.cnf"
+
     @"
 [client]
 user=root
-password=$RootPassPlain
-"@ | Out-File -FilePath $tmpCnf -Encoding ascii -Force
+password="$RootPassPlain"
+"@ | Set-Content -Path $tmpCnf -Encoding ASCII
 
     try {
         if (-not [string]::IsNullOrWhiteSpace($Sql)) {
@@ -225,10 +223,10 @@ password=$RootPassPlain
 
         if (-not [string]::IsNullOrWhiteSpace($SqlFile)) {
             $content = Get-Content -Path $SqlFile -Raw
-            $content | & $MysqlExe "--defaults-extra-file=$tmpCnf" 2>&1
+            $result = $content | & $MysqlExe "--defaults-extra-file=$tmpCnf" 2>&1
             return [PSCustomObject]@{
                 ExitCode = $LASTEXITCODE
-                Output   = ""
+                Output   = ($result | Out-String)
             }
         }
 
@@ -308,19 +306,18 @@ if (-not $GitExe) {
 $GitVersion = (& $GitExe --version)
 Print-Success "Git détecté : $GitVersion"
 
-$MysqlExe = "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
+$MysqlExe = Resolve-Executable -Name "mysql.exe" -FallbackPaths @(
+    "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
+    "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
+    "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe",
+    "C:\Program Files\MySQL\MySQL Server 9.6\bin\mysql.exe"
+)
 
 if ([string]::IsNullOrWhiteSpace($MysqlExe)) {
-    Print-Error "ERREUR CRITIQUE : mysql.exe non trouvé malgré la détection précédente"
-    exit 1
-}
-
-Write-Host "DEBUG MYSQL = [$MysqlExe]" -ForegroundColor Yellow
-
-if (-not $MysqlExe) {
     Print-Error "mysql.exe introuvable."
     exit 1
 }
+
 $MysqlVersion = (& $MysqlExe --version)
 Print-Success "MySQL détecté : $MysqlVersion"
 
@@ -359,7 +356,6 @@ if ($UseCurrentRepo) {
     Print-Success "Dépôt cloné dans $SourceRepoDir"
 }
 
-# Si on installe depuis le repo courant, on déploie dans InstallRoot\weight-stream
 if ($UseCurrentRepo) {
     if (-not (Test-Path $InstallRoot)) {
         New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
@@ -403,22 +399,8 @@ if (-not (Test-Path (Join-Path $ServerDir "package.json"))) {
 # ------------------------------------------------------------
 Print-Step "Configuration MySQL"
 
-$MysqlRootPass = Read-Host -AsSecureString "Mot de passe root MySQL"
-$BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($MysqlRootPass)
-
-try {
-    $RootPassPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($BSTR)
-}
-finally {
-    if ($BSTR -ne [IntPtr]::Zero) {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($RootPassPlain)) {
-    Print-Error "Le mot de passe root MySQL est vide."
-    exit 1
-}
+# Mot de passe root fixé provisoirement
+$RootPassPlain = "toor"
 
 $DbPass = New-RandomPassword -Length 20
 
@@ -523,7 +505,7 @@ echo Demarrage du backend sur $BackendPort...
 start "Weight Stream Backend" cmd /k "cd /d ""%~dp0server"" && node dist\index.js"
 
 echo Demarrage du frontend sur $FrontendPort...
-start "Weight Stream Frontend" cmd /k "cd /d ""%~dp0"" && ""$NpxExe"" serve -s dist -l $FrontendPort"
+start "Weight Stream Frontend" cmd /k "cd /d ""%~dp0"" && ""$NpxExe"" --yes serve -s dist -l $FrontendPort"
 
 echo.
 echo Application disponible sur :
@@ -554,6 +536,9 @@ Write-Host "Base MySQL :" -ForegroundColor $ColorWarning
 Write-Host "  DB   : $DbName"
 Write-Host "  User : $DbUser"
 Write-Host "  Pass : sauvegardé dans $EnvFile"
+Write-Host ""
+Write-Host "Mot de passe root MySQL utilisé par ce script : toor" -ForegroundColor $ColorWarning
+Write-Host "Pense à le changer ensuite si nécessaire."
 Write-Host ""
 Write-Host "Pour lancer l'application :" -ForegroundColor $ColorInfo
 Write-Host "  $StartBat"
