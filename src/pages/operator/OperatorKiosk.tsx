@@ -98,7 +98,12 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   }, []);
 
   const selectedLine = useMemo(() => lines.find(l => l.id === lineId) || null, [lines, lineId]);
-  const sensor = useSensorData({ scaleUrl: selectedLine?.scale_url, pollingInterval: 800 });
+  const sensor = useSensorData({
+    scaleUrl: selectedLine?.scale_url,
+    pollingInterval: 800,
+    stableReadingsRequired: 3,  // 3 lectures stables concordantes requises (~2.4s à 800ms)
+    stableDeviation: 0.5,       // écart max 0.5 entre les lectures
+  });
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
   const isTaskRunning = activeTask?.status === 'in_progress';
   const isTaskActive = activeTask && activeTask.status !== 'completed' && activeTask.status !== 'cancelled';
@@ -226,7 +231,10 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
 
   const confirmWeighing = async (conformityStatus: 'conforme' | 'non_conforme') => {
     if (!activeTaskId) return;
-    const weight = sensor.weight.value || 0;
+    // Use confirmed weight if available, otherwise use raw sensor weight
+    const weight = sensor.confirmedWeight.isConfirmed
+      ? sensor.confirmedWeight.value
+      : (sensor.weight.value || 0);
     if (!weight) {
       showMessage('Aucun poids détecté (ou 0)', 'error');
       return;
@@ -235,6 +243,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       await apiClient.addProductionItem(activeTaskId, weight, conformityStatus);
       await loadTasks(lineId);
       await loadRecentItems(activeTaskId);
+      sensor.resetConfirmation(); // Reset for next product
       const label = conformityStatus === 'conforme' ? 'Conforme' : 'Non conforme';
       showMessage(`${label} — ${weight.toFixed(3)} kg`, conformityStatus === 'conforme' ? 'success' : 'warning');
     } catch (e: any) {
@@ -301,45 +310,60 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     return { label: 'Dans la tolérance', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-400/40', icon: '●', glow: 'shadow-emerald-500/20', inTolerance: true };
   }, [sensor.weight.value, activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
 
-  // === Auto-validation: when weight is stable AND within tolerance, auto-confirm as conforme ===
+  // === Confirmed weight state (tolerance check on confirmed weight) ===
+  const confirmedWeightState = useMemo(() => {
+    if (!activeTask?.target_weight || !activeTask?.tolerance_min || !activeTask?.tolerance_max) return null;
+    if (!sensor.confirmedWeight.isConfirmed) return null;
+    const w = sensor.confirmedWeight.value;
+    if (w === 0) return null;
+    if (w < activeTask.tolerance_min) return { label: 'Sous-poids', inTolerance: false };
+    if (w > activeTask.tolerance_max) return { label: 'Surpoids', inTolerance: false };
+    return { label: 'Dans la tolérance', inTolerance: true };
+  }, [sensor.confirmedWeight.isConfirmed, sensor.confirmedWeight.value, activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
+
+  // === Auto-validation: uses CONFIRMED weight (multiple stable readings) ===
   const autoValidationRef = useRef(false);
-  const lastAutoValidatedWeightRef = useRef<number>(0);
 
   useEffect(() => {
     // Only auto-validate when:
     // 1. Task is running (in_progress)
-    // 2. Weight is stable
-    // 3. Weight is within tolerance
-    // 4. We haven't already auto-validated this exact weight reading
-    // 5. Weight is not zero
+    // 2. Weight is CONFIRMED (multiple concordant stable readings)
+    // 3. Confirmed weight is within tolerance
+    // 4. Not already auto-validating
     if (
       isTaskRunning &&
-      isStable &&
-      weightState?.inTolerance &&
-      sensor.weight.value > 0 &&
+      sensor.confirmedWeight.isConfirmed &&
+      confirmedWeightState?.inTolerance &&
       !autoValidationRef.current
     ) {
-      // Prevent double-submit: mark as validating
       autoValidationRef.current = true;
-      lastAutoValidatedWeightRef.current = sensor.weight.value;
 
-      // Auto-confirm as conforme
-      confirmWeighing('conforme').finally(() => {
-        // After a short delay, allow next auto-validation
-        // This prevents rapid-fire submissions while the same product is on the scale
-        setTimeout(() => {
-          autoValidationRef.current = false;
-        }, 2000); // 2 second cooldown between auto-validations
-      });
+      // Use the confirmed weight (average of stable readings) for the API call
+      const confirmedValue = sensor.confirmedWeight.value;
+      (async () => {
+        try {
+          await apiClient.addProductionItem(activeTaskId, confirmedValue, 'conforme');
+          await loadTasks(lineId);
+          await loadRecentItems(activeTaskId);
+          showMessage(`Conforme — ${confirmedValue.toFixed(3)} kg (poids confirmé)`, 'success');
+          // Reset confirmation cycle for next product
+          sensor.resetConfirmation();
+        } catch (e: any) {
+          showMessage(e?.message || "Impossible d'enregistrer", 'error');
+        } finally {
+          // Cooldown before allowing next auto-validation
+          setTimeout(() => {
+            autoValidationRef.current = false;
+          }, 1500);
+        }
+      })();
     }
 
-    // Reset auto-validation flag when weight becomes unstable or zero
-    // (product removed/replaced on scale)
-    if (!isStable || sensor.weight.value === 0) {
+    // Reset when weight goes to zero (product removed from scale)
+    if (sensor.weight.value === 0 || sensor.weight.status === 'offline') {
       autoValidationRef.current = false;
-      lastAutoValidatedWeightRef.current = 0;
     }
-  }, [isStable, weightState?.inTolerance, sensor.weight.value, isTaskRunning]);
+  }, [sensor.confirmedWeight.isConfirmed, confirmedWeightState?.inTolerance, isTaskRunning]);
 
   const progressPct = activeTask ? Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100) : 0;
 
@@ -611,11 +635,26 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                 {/* ── Boutons de pesage ── */}
                 {isTaskRunning && (
                   <div className="mt-5 flex flex-col gap-3 relative z-10 w-full px-6">
-                    {/* Auto-validation indicator */}
-                    {weightState?.inTolerance && isStable && (
-                      <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 animate-pulse">
+                    {/* Weight confirmation progress indicator */}
+                    {isStable && weightState?.inTolerance && !sensor.confirmedWeight.isConfirmed && sensor.confirmedWeight.progress > 0 && (
+                      <div className="flex flex-col items-center gap-1.5 py-2 px-4 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400">
+                        <div className="flex items-center gap-2">
+                          <Activity className="w-3.5 h-3.5 animate-pulse" />
+                          <span className="text-xs font-semibold">Confirmation du poids... ({sensor.confirmedWeight.stableCount}/{sensor.confirmedWeight.requiredCount})</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-sky-400 rounded-full transition-all duration-300"
+                            style={{ width: `${sensor.confirmedWeight.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {/* Auto-validation indicator (confirmed + in tolerance) */}
+                    {sensor.confirmedWeight.isConfirmed && confirmedWeightState?.inTolerance && (
+                      <div className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 animate-pulse">
                         <CheckCircle className="w-4 h-4" />
-                        <span className="text-sm font-semibold">Validation automatique...</span>
+                        <span className="text-sm font-semibold">Poids confirmé {sensor.confirmedWeight.value.toFixed(3)} kg — Validation auto...</span>
                       </div>
                     )}
                     <div className="flex gap-4">

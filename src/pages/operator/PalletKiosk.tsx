@@ -287,9 +287,9 @@ export function PalletKiosk({ lineId, lines, onSwitchToUnit }: PalletKioskProps)
   };
 
   // === Sensor status ===
-  const sensorStatus = sensor.weight.isStable ? 'stable' :
-    sensor.weight.value > 0 ? 'unstable' :
-    sensor.error ? 'error' : 'offline';
+  const sensorStatus = sensor.weight.status === 'stable' ? 'stable' :
+    sensor.weight.status === 'unstable' ? 'unstable' :
+    sensor.weight.status === 'error' ? 'error' : 'offline';
 
   const isStable = sensorStatus === 'stable' && sensor.weight.value > 0;
   const isUnstable = sensorStatus === 'unstable';
