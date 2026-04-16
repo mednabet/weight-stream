@@ -201,8 +201,20 @@ if (Test-Path $AppDirFull) {
     Write-Warn ("Le dossier " + $AppDirFull + " existe deja.")
     $rep = Read-Host "Supprimer et reinstaller ? (O/N)"
     if ($rep -match "^[OoYy]") {
+        # Se deplacer hors du dossier avant de le supprimer
+        Set-Location $env:USERPROFILE
         Write-Info "Suppression..."
-        Remove-Item -Path $AppDirFull -Recurse -Force
+        # Arreter les processus node qui pourraient verrouiller le dossier
+        Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        try {
+            Remove-Item -Path $AppDirFull -Recurse -Force
+        } catch {
+            Write-Warn "Premiere tentative echouee, nouvel essai dans 5 secondes..."
+            Start-Sleep -Seconds 5
+            Remove-Item -Path $AppDirFull -Recurse -Force
+        }
+        Write-OK "Ancien dossier supprime."
     } else {
         Fail "Installation annulee."
     }
