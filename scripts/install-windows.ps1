@@ -329,6 +329,12 @@ $startLines += "    echo [ERREUR] Build frontend introuvable. Lancez le build d 
 $startLines += "    pause"
 $startLines += "    exit /b 1"
 $startLines += ")"
+$startLines += "echo [INFO] Verification du port $AppPort..."
+$startLines += ("for /f `"tokens=5`" %%a in ('netstat -aon ^| findstr :" + $AppPort + " ^| findstr LISTENING') do (")
+$startLines += "    echo [INFO] Arret de l ancien processus PID %%a sur le port $AppPort..."
+$startLines += "    taskkill /PID %%a /F >nul 2>nul"
+$startLines += "    timeout /t 2 /nobreak >nul"
+$startLines += ")"
 $startLines += ("echo [INFO] Demarrage de Weight Stream sur le port " + $AppPort + "...")
 $startLines += "echo [INFO] Le backend Express sert aussi le frontend (single-port)."
 $startLines += "echo."
@@ -370,6 +376,10 @@ $stopLines = @()
 $stopLines += "@echo off"
 $stopLines += "echo [INFO] Arret des services Weight Stream..."
 $stopLines += "taskkill /FI `"WINDOWTITLE eq WeightStream*`" /F >nul 2>nul"
+$stopLines += ("for /f `"tokens=5`" %%a in ('netstat -aon ^| findstr :" + $AppPort + " ^| findstr LISTENING') do (")
+$stopLines += "    echo [INFO] Arret du processus PID %%a sur le port $AppPort..."
+$stopLines += "    taskkill /PID %%a /F >nul 2>nul"
+$stopLines += ")"
 $stopLines += "echo [OK] Services arretes."
 $stopLines += "pause"
 
@@ -382,6 +392,11 @@ $bgLines += "@echo off"
 $bgLines += "cd /d `"%~dp0`""
 $bgLines += "if not exist `"server\dist\index.js`" exit /b 1"
 $bgLines += "if not exist `"dist\index.html`" exit /b 1"
+$bgLines += "REM Tuer l ancien processus sur le port si present"
+$bgLines += ("for /f `"tokens=5`" %%a in ('netstat -aon ^| findstr :" + $AppPort + " ^| findstr LISTENING') do (")
+$bgLines += "    taskkill /PID %%a /F >nul 2>nul"
+$bgLines += ")"
+$bgLines += "timeout /t 2 /nobreak >nul"
 $bgLines += "cd /d `"%~dp0server`""
 $bgLines += "start /min `"WeightStream`" cmd /c `"node dist\index.js`""
 
