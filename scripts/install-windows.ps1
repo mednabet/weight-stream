@@ -151,8 +151,12 @@ if ($mysqlAvailable) {
     $sqlLines += "FLUSH PRIVILEGES;"
     [System.IO.File]::WriteAllLines($sqlFile, $sqlLines, [System.Text.Encoding]::UTF8)
 
+    # Convertir les chemins en forward slashes pour MySQL
+    $tmpCnfMySQL = $tmpCnf.Replace("\", "/")
+    $sqlFileMySQL = $sqlFile.Replace("\", "/")
+    $cnfArg = "--defaults-extra-file=" + $tmpCnfMySQL
+
     # Tester la connexion root
-    $cnfArg = "--defaults-extra-file=" + $tmpCnf
     & mysql $cnfArg -e "SELECT 1;" 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Remove-Item -Path $tmpCnf -Force -ErrorAction SilentlyContinue
@@ -162,9 +166,8 @@ if ($mysqlAvailable) {
     }
     Write-OK "Connexion MySQL root validee."
 
-    # Executer le script SQL
-    $sourceCmd = "source " + $sqlFile
-    & mysql $cnfArg -e $sourceCmd 2>&1 | Out-Null
+    # Executer le script SQL via redirection stdin
+    Get-Content -Path $sqlFile -Raw | & mysql $cnfArg 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Remove-Item -Path $tmpCnf -Force -ErrorAction SilentlyContinue
         Remove-Item -Path $sqlFile -Force -ErrorAction SilentlyContinue
