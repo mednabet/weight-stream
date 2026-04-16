@@ -296,10 +296,50 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     if (!activeTask?.target_weight || !activeTask?.tolerance_min || !activeTask?.tolerance_max) return null;
     const w = sensor.weight.value;
     if (w === 0) return null;
-    if (w < activeTask.tolerance_min) return { label: 'Sous-poids', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-400/40', icon: '▼', glow: 'shadow-sky-500/20' };
-    if (w > activeTask.tolerance_max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20' };
-    return { label: 'Dans la tolérance', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-400/40', icon: '●', glow: 'shadow-emerald-500/20' };
+    if (w < activeTask.tolerance_min) return { label: 'Sous-poids', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-400/40', icon: '▼', glow: 'shadow-sky-500/20', inTolerance: false };
+    if (w > activeTask.tolerance_max) return { label: 'Surpoids', color: 'text-rose-400', bg: 'bg-rose-500/20 border-rose-400/40', icon: '▲', glow: 'shadow-rose-500/20', inTolerance: false };
+    return { label: 'Dans la tolérance', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-400/40', icon: '●', glow: 'shadow-emerald-500/20', inTolerance: true };
   }, [sensor.weight.value, activeTask?.target_weight, activeTask?.tolerance_min, activeTask?.tolerance_max]);
+
+  // === Auto-validation: when weight is stable AND within tolerance, auto-confirm as conforme ===
+  const autoValidationRef = useRef(false);
+  const lastAutoValidatedWeightRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Only auto-validate when:
+    // 1. Task is running (in_progress)
+    // 2. Weight is stable
+    // 3. Weight is within tolerance
+    // 4. We haven't already auto-validated this exact weight reading
+    // 5. Weight is not zero
+    if (
+      isTaskRunning &&
+      isStable &&
+      weightState?.inTolerance &&
+      sensor.weight.value > 0 &&
+      !autoValidationRef.current
+    ) {
+      // Prevent double-submit: mark as validating
+      autoValidationRef.current = true;
+      lastAutoValidatedWeightRef.current = sensor.weight.value;
+
+      // Auto-confirm as conforme
+      confirmWeighing('conforme').finally(() => {
+        // After a short delay, allow next auto-validation
+        // This prevents rapid-fire submissions while the same product is on the scale
+        setTimeout(() => {
+          autoValidationRef.current = false;
+        }, 2000); // 2 second cooldown between auto-validations
+      });
+    }
+
+    // Reset auto-validation flag when weight becomes unstable or zero
+    // (product removed/replaced on scale)
+    if (!isStable || sensor.weight.value === 0) {
+      autoValidationRef.current = false;
+      lastAutoValidatedWeightRef.current = 0;
+    }
+  }, [isStable, weightState?.inTolerance, sensor.weight.value, isTaskRunning]);
 
   const progressPct = activeTask ? Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100) : 0;
 
@@ -568,25 +608,34 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
                   </div>
                 )}
 
-                {/* ── Boutons Conforme / Non conforme intégrés sous le poids ── */}
+                {/* ── Boutons de pesage ── */}
                 {isTaskRunning && (
-                  <div className="mt-5 flex gap-4 relative z-10 w-full px-6">
-                    <button
-                      onClick={() => confirmWeighing('conforme')}
-                      disabled={!isStable}
-                      className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
-                    >
-                      <CheckCircle className="w-8 h-8" />
-                      <span className="text-lg font-bold tracking-tight">Conforme</span>
-                    </button>
-                    <button
-                      onClick={() => confirmWeighing('non_conforme')}
-                      disabled={!isStable}
-                      className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
-                    >
-                      <XCircle className="w-8 h-8" />
-                      <span className="text-lg font-bold tracking-tight">Non conforme</span>
-                    </button>
+                  <div className="mt-5 flex flex-col gap-3 relative z-10 w-full px-6">
+                    {/* Auto-validation indicator */}
+                    {weightState?.inTolerance && isStable && (
+                      <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 animate-pulse">
+                        <CheckCircle className="w-4 h-4" />
+                        <span className="text-sm font-semibold">Validation automatique...</span>
+                      </div>
+                    )}
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => confirmWeighing('conforme')}
+                        disabled={!isStable}
+                        className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 border border-emerald-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-emerald-500/90 hover:to-emerald-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-emerald-900/30"
+                      >
+                        <CheckCircle className="w-8 h-8" />
+                        <span className="text-lg font-bold tracking-tight">Conforme</span>
+                      </button>
+                      <button
+                        onClick={() => confirmWeighing('non_conforme')}
+                        disabled={!isStable}
+                        className="flex-1 h-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-br from-rose-600/90 to-rose-700/90 border border-rose-500/30 text-white disabled:opacity-20 disabled:grayscale hover:from-rose-500/90 hover:to-rose-600/90 active:scale-[0.97] transition-all duration-150 touch-manipulation shadow-lg shadow-rose-900/30"
+                      >
+                        <XCircle className="w-8 h-8" />
+                        <span className="text-lg font-bold tracking-tight">Non conforme</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

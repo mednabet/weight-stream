@@ -41,9 +41,19 @@ app.use(helmet({
 }));
 
 // ─── Rate limiting ───
+// Scale proxy: polled every ~800ms per terminal, needs high limit
+const scaleProxyLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 300, // 300 req/min per IP (supports ~3 terminals polling at 800ms)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes balance, veuillez réessayer' },
+});
+
+// General API: generous limit to avoid blocking normal usage
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // 500 requests per 15 min per IP
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 200, // 200 req/min per IP for general API
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de requêtes, veuillez réessayer plus tard' },
@@ -57,6 +67,8 @@ const authLimiter = rateLimit({
   message: { error: 'Trop de tentatives de connexion, veuillez réessayer dans 15 minutes' },
 });
 
+// Apply scale proxy limiter BEFORE general limiter (more permissive)
+app.use('/api/scale-proxy', scaleProxyLimiter);
 app.use('/api/', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/signup', authLimiter);
