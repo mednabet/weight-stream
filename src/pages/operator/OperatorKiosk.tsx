@@ -347,14 +347,18 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
 
   useEffect(() => {
     // Threshold under which the scale is considered "empty enough" to arm the
-    // next capture. Half of the lower tolerance bound is a safe choice: well
-    // below a single product's expected weight, but tolerant of residual tare.
-    const zeroThreshold = toleranceBounds ? toleranceBounds.min / 2 : 0.5;
+    // next capture. Use 30% of the target weight: well below a single
+    // product's expected weight while tolerating small residue/tare drift.
+    const target = Number(activeTask?.target_weight) || 0;
+    const zeroThreshold = target > 0 ? target * 0.3 : 0.5;
 
-    // Re-arm once the scale has clearly been emptied
+    // Re-arm only on a deliberate STABLE near-zero reading. Ignoring unstable
+    // and error readings prevents transient glitches from prematurely
+    // releasing the gate while the product is still on the scale.
     if (
       awaitingZeroRef.current &&
-      (sensor.weight.value < zeroThreshold || sensor.weight.status === 'offline')
+      sensor.weight.status === 'stable' &&
+      sensor.weight.value < zeroThreshold
     ) {
       awaitingZeroRef.current = false;
     }
@@ -393,7 +397,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     sensor.weight.status,
     confirmedWeightState?.inTolerance,
     isTaskRunning,
-    toleranceBounds,
+    activeTask?.target_weight,
   ]);
 
   const progressPct = activeTask ? Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100) : 0;
