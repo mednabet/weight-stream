@@ -356,8 +356,14 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     const target = Number(activeTask?.target_weight) || 0;
     const zeroThreshold = target > 0 ? target * 0.2 : 0.2;
 
-    // Track minimum stable weight since last capture
-    if (sensor.weight.status === 'stable' && sensor.weight.value < minWeightSinceCaptureRef.current) {
+    // Track minimum weight since last capture. Accept both stable and unstable
+    // readings — when removing a product the scale often passes through
+    // unstable near-zero before settling. Exclude error/offline which return
+    // value=0 from network glitches and would falsely open the gate.
+    if (
+      (sensor.weight.status === 'stable' || sensor.weight.status === 'unstable') &&
+      sensor.weight.value < minWeightSinceCaptureRef.current
+    ) {
       minWeightSinceCaptureRef.current = sensor.weight.value;
     }
 
