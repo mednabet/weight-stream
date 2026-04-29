@@ -340,20 +340,34 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
 
   // === Auto-validation: uses CONFIRMED weight (multiple stable readings) ===
   const autoValidationRef = useRef(false);
+  // After a capture, require the scale to drop back near zero before allowing
+  // the next auto-validation. Prevents 2-3 captures of the same product when
+  // it stays on the scale across consecutive confirmation cycles.
+  const awaitingZeroRef = useRef(false);
 
   useEffect(() => {
-    // Only auto-validate when:
-    // 1. Task is running (in_progress)
-    // 2. Weight is CONFIRMED (multiple concordant stable readings)
-    // 3. Confirmed weight is within tolerance
-    // 4. Not already auto-validating
+    // Threshold under which the scale is considered "empty enough" to arm the
+    // next capture. Half of the lower tolerance bound is a safe choice: well
+    // below a single product's expected weight, but tolerant of residual tare.
+    const zeroThreshold = toleranceBounds ? toleranceBounds.min / 2 : 0.5;
+
+    // Re-arm once the scale has clearly been emptied
+    if (
+      awaitingZeroRef.current &&
+      (sensor.weight.value < zeroThreshold || sensor.weight.status === 'offline')
+    ) {
+      awaitingZeroRef.current = false;
+    }
+
     if (
       isTaskRunning &&
       sensor.confirmedWeight.isConfirmed &&
       confirmedWeightState?.inTolerance &&
-      !autoValidationRef.current
+      !autoValidationRef.current &&
+      !awaitingZeroRef.current
     ) {
       autoValidationRef.current = true;
+      awaitingZeroRef.current = true;
 
       // Use the confirmed weight (average of stable readings) for the API call
       const confirmedValue = sensor.confirmedWeight.value;
@@ -363,24 +377,24 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
           await loadTasks(lineId);
           await loadRecentItems(activeTaskId);
           showMessage(`Conforme — ${confirmedValue.toFixed(3)} kg (poids confirmé)`, 'success');
-          // Reset confirmation cycle for next product
           sensor.resetConfirmation();
         } catch (e: any) {
+          // On failure, don't block the next attempt
+          awaitingZeroRef.current = false;
           showMessage(e?.message || "Impossible d'enregistrer", 'error');
         } finally {
-          // Cooldown before allowing next auto-validation
-          setTimeout(() => {
-            autoValidationRef.current = false;
-          }, 1500);
+          autoValidationRef.current = false;
         }
       })();
     }
-
-    // Reset when weight goes to zero (product removed from scale)
-    if (sensor.weight.value === 0 || sensor.weight.status === 'offline') {
-      autoValidationRef.current = false;
-    }
-  }, [sensor.confirmedWeight.isConfirmed, confirmedWeightState?.inTolerance, isTaskRunning]);
+  }, [
+    sensor.confirmedWeight.isConfirmed,
+    sensor.weight.value,
+    sensor.weight.status,
+    confirmedWeightState?.inTolerance,
+    isTaskRunning,
+    toleranceBounds,
+  ]);
 
   const progressPct = activeTask ? Math.min(100, (activeTask.produced_quantity / activeTask.target_quantity) * 100) : 0;
 
