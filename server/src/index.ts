@@ -40,22 +40,22 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// ─── Rate limiting ───
-// Scale proxy: polled every ~800ms per terminal, needs high limit
+// Scale proxy: polled every ~800ms per terminal
 const scaleProxyLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute window
-  max: 300, // 300 req/min per IP (supports ~3 terminals polling at 800ms)
+  windowMs: 1 * 60 * 1000,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de requêtes balance, veuillez réessayer' },
 });
 
-// General API: generous limit to avoid blocking normal usage
+// General API: skip scale-proxy (already rate-limited above) and increase max
 const generalLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute window
-  max: 200, // 200 req/min per IP for general API
+  windowMs: 1 * 60 * 1000,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path.startsWith('/scale-proxy'),
   message: { error: 'Trop de requêtes, veuillez réessayer plus tard' },
 });
 
