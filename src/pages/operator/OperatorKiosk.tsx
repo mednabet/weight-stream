@@ -340,53 +340,43 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
 
   // === Auto-validation: uses CONFIRMED weight (multiple stable readings) ===
   const autoValidationRef = useRef(false);
-  // After a capture, require the scale to drop back near zero before allowing
-  // the next auto-validation. Prevents 2-3 captures of the same product when
-  // it stays on the scale across consecutive confirmation cycles.
-  const awaitingZeroRef = useRef(false);
-  // Counter of consecutive stable near-zero readings observed since the last
-  // capture. The gate only releases once we have seen ZERO_READINGS_REQUIRED
-  // of them in a row — debounces transient zero readings from sensor glitches.
-  const zeroReadingsRef = useRef(0);
-  const ZERO_READINGS_REQUIRED = 3;
+  // Tracks the minimum stable weight observed since the last capture.
+  // A new capture is only allowed once this minimum has dropped below the
+  // near-zero threshold — i.e. the operator must have actually emptied the
+  // scale at some point since the previous capture.
+  const minWeightSinceCaptureRef = useRef<number>(0);
+  // Cooldown end timestamp: secondary safety to absorb settling oscillations
+  // immediately after a capture.
+  const cooldownUntilRef = useRef<number>(0);
 
   useEffect(() => {
-    // Threshold under which the scale is considered "empty enough" to arm the
-    // next capture. Use 15% of the target weight: well below a single
-    // product's expected weight while tolerating small residue/tare drift.
+    // Threshold under which the scale is considered "empty enough" to allow
+    // the next capture. 20% of target weight is well below any expected
+    // product weight while tolerating small residue and tare drift.
     const target = Number(activeTask?.target_weight) || 0;
-    const zeroThreshold = target > 0 ? target * 0.15 : 0.2;
+    const zeroThreshold = target > 0 ? target * 0.2 : 0.2;
 
-    // Re-arm only after multiple consecutive stable near-zero readings.
-    if (awaitingZeroRef.current) {
-      const isNearZero =
-        sensor.weight.status === 'stable' && sensor.weight.value < zeroThreshold;
-
-      if (isNearZero) {
-        zeroReadingsRef.current += 1;
-        if (zeroReadingsRef.current >= ZERO_READINGS_REQUIRED) {
-          awaitingZeroRef.current = false;
-          zeroReadingsRef.current = 0;
-        }
-      } else if (sensor.weight.value >= zeroThreshold) {
-        // Weight went back up — restart the count
-        zeroReadingsRef.current = 0;
-      }
-      // For unstable/error/offline statuses, keep current count without resetting
+    // Track minimum stable weight since last capture
+    if (sensor.weight.status === 'stable' && sensor.weight.value < minWeightSinceCaptureRef.current) {
+      minWeightSinceCaptureRef.current = sensor.weight.value;
     }
+
+    const hasReturnedToZero = minWeightSinceCaptureRef.current < zeroThreshold;
+    const cooldownActive = Date.now() < cooldownUntilRef.current;
 
     if (
       isTaskRunning &&
       sensor.confirmedWeight.isConfirmed &&
       confirmedWeightState?.inTolerance &&
       !autoValidationRef.current &&
-      !awaitingZeroRef.current
+      hasReturnedToZero &&
+      !cooldownActive
     ) {
       autoValidationRef.current = true;
-      awaitingZeroRef.current = true;
-      zeroReadingsRef.current = 0;
+      // Re-arm the zero gate: next capture won't fire until min drops again
+      minWeightSinceCaptureRef.current = Infinity;
+      cooldownUntilRef.current = Date.now() + 1500;
 
-      // Use the confirmed weight (average of stable readings) for the API call
       const confirmedValue = sensor.confirmedWeight.value;
       (async () => {
         try {
@@ -396,9 +386,9 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
           showMessage(`Conforme — ${confirmedValue.toFixed(3)} kg (poids confirmé)`, 'success');
           sensor.resetConfirmation();
         } catch (e: any) {
-          // On failure, don't block the next attempt
-          awaitingZeroRef.current = false;
-          zeroReadingsRef.current = 0;
+          // On failure, allow retry: reset gate
+          minWeightSinceCaptureRef.current = 0;
+          cooldownUntilRef.current = 0;
           showMessage(e?.message || "Impossible d'enregistrer", 'error');
         } finally {
           autoValidationRef.current = false;
