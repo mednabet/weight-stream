@@ -5,10 +5,12 @@ import { WeightReading, WeightStatus } from '@/types/production';
 interface SensorConfig {
   scaleUrl?: string | null;
   pollingInterval?: number;
-  /** Number of times the same stable value must appear to be confirmed (default: 3) */
+  /** Number of times the same stable value must appear to confirm on return-to-zero (default: 3) */
   stableReadingsRequired?: number;
   /** Rounding precision (decimal places) used to group similar readings (default: 2) */
   stableRoundingDecimals?: number;
+  /** Values at or below this threshold are treated as "zero" (default: 0.05) */
+  zeroThreshold?: number;
 }
 
 export interface StableFrequencyEntry {
@@ -17,15 +19,15 @@ export interface StableFrequencyEntry {
 }
 
 export interface ConfirmedWeight {
-  /** The confirmed weight — the stable value captured the most times */
+  /** The confirmed weight — the stable value captured the most times, set when scale returns to zero */
   value: number;
-  /** Whether the weight has been confirmed */
+  /** True only after the scale has returned to zero with accumulated stable readings */
   isConfirmed: boolean;
-  /** How many times the most-frequent stable value has been captured */
+  /** How many times the most-frequent stable value was captured */
   stableCount: number;
-  /** Number of captures required for confirmation */
+  /** Number of captures required for the weight to be eligible for confirmation */
   requiredCount: number;
-  /** Progress percentage (0-100) toward confirmation */
+  /** Progress percentage (0-100) toward the required capture count */
   progress: number;
   /** Frequency breakdown of all captured stable values, sorted by count desc */
   stableFrequencies: StableFrequencyEntry[];
@@ -36,97 +38,68 @@ interface UseSensorDataResult {
   confirmedWeight: ConfirmedWeight;
   isScaleConnected: boolean;
   errors: { scale?: string };
-  /** Call this after recording a weighing to reset the confirmation cycle */
+  /** Call this after consuming a confirmed weight to clear it */
   resetConfirmation: () => void;
 }
 
-// Parse weight from text response
-// Formats supported:
-// - "s-100" or "S-100" -> stable, 100g
-// - "i-1200" or "I-1200" -> unstable, 1200g
-// - "error" -> disconnected/error
-// - "1234.5" or "1234,5" -> stable (default), value
-// - "1234.5 g" -> stable, value with unit
 function parseWeight(text: string): { value: number; status: WeightStatus } {
   const trimmed = text.trim().toLowerCase();
-  
-  // Check for error/disconnected
+
   if (trimmed === 'error' || trimmed.includes('err') || trimmed === 'disconnect') {
     return { value: 0, status: 'error' };
   }
-  
-  // Format: s-XXX (stable) or i-XXX (unstable)
+
   const prefixMatch = trimmed.match(/^([si])-(.+)$/);
   if (prefixMatch) {
     const stabilityPrefix = prefixMatch[1];
     const valueStr = prefixMatch[2].replace(',', '.');
     const value = parseFloat(valueStr);
-    
-    if (isNaN(value)) {
-      return { value: 0, status: 'error' };
-    }
-    
-    return {
-      value,
-      status: stabilityPrefix === 's' ? 'stable' : 'unstable',
-    };
+    if (isNaN(value)) return { value: 0, status: 'error' };
+    return { value, status: stabilityPrefix === 's' ? 'stable' : 'unstable' };
   }
-  
-  // Fallback: extract numeric value (supports "1234.5", "1234,5", "1234.5 g")
+
   const numericMatch = trimmed.match(/^[\s]*([+-]?\d+[.,]?\d*)/);
-  if (!numericMatch) {
-    return { value: 0, status: 'error' };
-  }
-  
+  if (!numericMatch) return { value: 0, status: 'error' };
+
   const value = parseFloat(numericMatch[1].replace(',', '.'));
-  
-  // Check for stability indicators in remaining text
   const hasUnstableIndicator = trimmed.includes('u') || trimmed.includes('m') || trimmed.includes('instable');
-  
-  return {
-    value,
-    status: hasUnstableIndicator ? 'unstable' : 'stable',
-  };
+  return { value, status: hasUnstableIndicator ? 'unstable' : 'stable' };
 }
 
-// Build the backend proxy URL for the scale
 function buildProxyUrl(scaleUrl: string): string {
   const apiBase = import.meta.env.VITE_API_URL || '/api';
   return `${apiBase}/scale-proxy?url=${encodeURIComponent(scaleUrl)}`;
 }
 
-// Fetch sensor data via backend proxy to avoid CORS issues
 async function fetchSensorViaProxy(scaleUrl: string): Promise<{ data?: string; error?: string }> {
   try {
     const proxyUrl = buildProxyUrl(scaleUrl);
     const token = localStorage.getItem('auth_token');
-    const headers: Record<string, string> = {
-      'Cache-Control': 'no-cache',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
+    const headers: Record<string, string> = { 'Cache-Control': 'no-cache' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(proxyUrl, { method: 'GET', headers });
     const text = await res.text();
-    if (res.ok) {
-      return { data: text };
-    } else {
-      return { error: `HTTP ${res.status}: ${text}` };
-    }
+    return res.ok ? { data: text } : { error: `HTTP ${res.status}: ${text}` };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Unknown error' };
   }
 }
 
-const EMPTY_CONFIRMED: ConfirmedWeight = {
-  value: 0,
-  isConfirmed: false,
-  stableCount: 0,
-  requiredCount: 3,
-  progress: 0,
-  stableFrequencies: [],
-};
+function makeEmpty(requiredCount: number): ConfirmedWeight {
+  return { value: 0, isConfirmed: false, stableCount: 0, requiredCount, progress: 0, stableFrequencies: [] };
+}
+
+function mostFrequentEntry(freq: Map<string, StableFrequencyEntry>): { value: number; count: number } {
+  let maxCount = 0;
+  let bestValue = 0;
+  for (const entry of freq.values()) {
+    if (entry.count > maxCount) {
+      maxCount = entry.count;
+      bestValue = entry.value;
+    }
+  }
+  return { value: bestValue, count: maxCount };
+}
 
 export function useSensorData(config: SensorConfig): UseSensorDataResult {
   const {
@@ -134,32 +107,21 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
     pollingInterval = 200,
     stableReadingsRequired = 3,
     stableRoundingDecimals = 2,
+    zeroThreshold = 0.05,
   } = config;
 
   const [weight, setWeight] = useState<WeightReading>({ value: 0, status: 'offline', timestamp: Date.now() });
   const [isScaleConnected, setIsScaleConnected] = useState(false);
   const [errors, setErrors] = useState<{ scale?: string }>({});
+  const [confirmedWeight, setConfirmedWeight] = useState<ConfirmedWeight>(makeEmpty(stableReadingsRequired));
 
-  // frequency map: rounded-value-string -> { value, count }
+  // Frequency map: rounded-value-string → { value, count }
   const freqMapRef = useRef<Map<string, StableFrequencyEntry>>(new Map());
-
-  const [confirmedWeight, setConfirmedWeight] = useState<ConfirmedWeight>({
-    ...EMPTY_CONFIRMED,
-    requiredCount: stableReadingsRequired,
-  });
-
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const resetConfirmation = useCallback(() => {
     freqMapRef.current = new Map();
-    setConfirmedWeight({ ...EMPTY_CONFIRMED, requiredCount: stableReadingsRequired });
-  }, [stableReadingsRequired]);
-
-  const resetFreqMap = useCallback(() => {
-    freqMapRef.current = new Map();
-    setConfirmedWeight(prev =>
-      prev.isConfirmed ? prev : { ...EMPTY_CONFIRMED, requiredCount: stableReadingsRequired }
-    );
+    setConfirmedWeight(makeEmpty(stableReadingsRequired));
   }, [stableReadingsRequired]);
 
   const pollSensors = useCallback(async () => {
@@ -176,7 +138,7 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
       setIsScaleConnected(false);
       setErrors(prev => ({ ...prev, scale: result.error }));
       freqMapRef.current = new Map();
-      setConfirmedWeight({ ...EMPTY_CONFIRMED, requiredCount: stableReadingsRequired });
+      setConfirmedWeight(makeEmpty(stableReadingsRequired));
       return;
     }
 
@@ -185,8 +147,35 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
     setIsScaleConnected(parsed.status !== 'error');
     setErrors(prev => ({ ...prev, scale: undefined }));
 
-    if (parsed.status === 'stable' && parsed.value > 0) {
-      // Round to configured decimal places for grouping
+    if (parsed.status === 'error') {
+      // Full reset on error
+      freqMapRef.current = new Map();
+      setConfirmedWeight(makeEmpty(stableReadingsRequired));
+      return;
+    }
+
+    if (parsed.value <= zeroThreshold) {
+      // Scale returned to zero — confirm if we have accumulated stable readings
+      const freq = freqMapRef.current;
+      if (freq.size > 0) {
+        const { value: bestValue, count: maxCount } = mostFrequentEntry(freq);
+        const stableFrequencies = Array.from(freq.values()).sort((a, b) => b.count - a.count);
+        setConfirmedWeight({
+          value: bestValue,
+          isConfirmed: maxCount >= stableReadingsRequired,
+          stableCount: maxCount,
+          requiredCount: stableReadingsRequired,
+          progress: 100,
+          stableFrequencies,
+        });
+        // Reset map so next placement starts fresh
+        freqMapRef.current = new Map();
+      }
+      return;
+    }
+
+    if (parsed.status === 'stable') {
+      // Item on scale and stable — accumulate into frequency map
       const factor = Math.pow(10, stableRoundingDecimals);
       const rounded = Math.round(parsed.value * factor) / factor;
       const key = rounded.toFixed(stableRoundingDecimals);
@@ -199,46 +188,29 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
         freq.set(key, { value: rounded, count: 1 });
       }
 
-      // Find the value captured the most times
-      let maxCount = 0;
-      let mostFrequentValue = rounded;
-      for (const entry of freq.values()) {
-        if (entry.count > maxCount) {
-          maxCount = entry.count;
-          mostFrequentValue = entry.value;
-        }
-      }
-
-      // Build sorted frequency list for display
-      const stableFrequencies: StableFrequencyEntry[] = Array.from(freq.values())
-        .sort((a, b) => b.count - a.count);
-
+      const { value: bestValue, count: maxCount } = mostFrequentEntry(freq);
+      const stableFrequencies = Array.from(freq.values()).sort((a, b) => b.count - a.count);
       const progress = Math.min(100, Math.round((maxCount / stableReadingsRequired) * 100));
 
+      // Not confirmed yet — waiting for scale to return to zero
       setConfirmedWeight({
-        value: mostFrequentValue,
-        isConfirmed: maxCount >= stableReadingsRequired,
+        value: bestValue,
+        isConfirmed: false,
         stableCount: maxCount,
         requiredCount: stableReadingsRequired,
         progress,
         stableFrequencies,
       });
-    } else {
-      // Not stable or zero → reset frequency map
-      resetFreqMap();
     }
-  }, [scaleUrl, stableReadingsRequired, stableRoundingDecimals, resetFreqMap]);
+    // unstable + value > zeroThreshold: item still settling, keep freq map as-is
+  }, [scaleUrl, stableReadingsRequired, stableRoundingDecimals, zeroThreshold]);
 
   useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
+    if (intervalRef.current) clearInterval(intervalRef.current);
     if (scaleUrl) {
       pollSensors();
       intervalRef.current = setInterval(pollSensors, pollingInterval);
     }
-
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -247,11 +219,5 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
     };
   }, [scaleUrl, pollingInterval, pollSensors]);
 
-  return {
-    weight,
-    confirmedWeight,
-    isScaleConnected,
-    errors,
-    resetConfirmation,
-  };
+  return { weight, confirmedWeight, isScaleConnected, errors, resetConfirmation };
 }
