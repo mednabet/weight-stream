@@ -338,57 +338,50 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     return { label: 'Dans la tolérance', inTolerance: true };
   }, [sensor.confirmedWeight.isConfirmed, sensor.confirmedWeight.value, toleranceBounds]);
 
-  // === Auto-validation: capture every stable in-tolerance reading ===
-  // Strategy: as soon as the scale reports a stable weight within tolerance,
-  // record it. Duplicates are prevented by the zero-gate below.
+  // === Auto-validation ===
+  // Fires on the FIRST stable reading inside tolerance, immediately.
+  // Duplicate-capture guard: a new capture is only allowed after the scale
+  // has been observed below 20% of the target weight (product removed).
   const autoValidationRef = useRef(false);
-  // Minimum weight observed since the last capture. Re-armed to Infinity
-  // after a capture, so the next capture is impossible until the scale has
-  // actually been emptied (operator must remove the product physically).
+  // Tracks minimum weight seen since last capture. Reset to Infinity after
+  // each capture so the gate stays closed until scale is physically emptied.
   const minWeightSinceCaptureRef = useRef<number>(0);
 
   useEffect(() => {
     const target = Number(activeTask?.target_weight) || 0;
-    // Threshold below which the scale is considered "empty enough" to allow
-    // the next capture. 20% of target weight tolerates residue/tare drift
-    // while still being well below a single product's weight.
     const zeroThreshold = target > 0 ? target * 0.2 : 0.2;
+    const w = sensor.weight.value;
+    const st = sensor.weight.status;
 
-    // Track minimum weight since last capture (stable or unstable, since the
-    // scale may oscillate while the operator is removing the product).
-    if (
-      (sensor.weight.status === 'stable' || sensor.weight.status === 'unstable') &&
-      sensor.weight.value < minWeightSinceCaptureRef.current
-    ) {
-      minWeightSinceCaptureRef.current = sensor.weight.value;
+    // Update minimum. Ignore error/offline (value=0 from network glitch).
+    if ((st === 'stable' || st === 'unstable') && w < minWeightSinceCaptureRef.current) {
+      minWeightSinceCaptureRef.current = w;
     }
 
     const hasReturnedToZero = minWeightSinceCaptureRef.current < zeroThreshold;
 
-    // Capture any stable in-tolerance reading. With stableReadingsRequired=1
-    // the sensor confirms on the first stable reading > 0, so this fires
-    // almost instantly when a product lands on the scale.
+    // Trigger: raw stable reading, non-zero, within tolerance.
+    // Avoids using confirmedWeight which stays "isConfirmed=true" even after
+    // the product leaves (bug: double-capture on product removal).
     if (
       isTaskRunning &&
-      sensor.confirmedWeight.isConfirmed &&
-      confirmedWeightState?.inTolerance &&
+      st === 'stable' &&
+      w > 0 &&
+      weightState?.inTolerance &&
       !autoValidationRef.current &&
       hasReturnedToZero
     ) {
       autoValidationRef.current = true;
-      // Re-arm the zero gate
       minWeightSinceCaptureRef.current = Infinity;
 
-      const confirmedValue = sensor.confirmedWeight.value;
       (async () => {
         try {
-          await apiClient.addProductionItem(activeTaskId, confirmedValue, 'conforme');
+          await apiClient.addProductionItem(activeTaskId, w, 'conforme');
           await loadTasks(lineId);
           await loadRecentItems(activeTaskId);
-          showMessage(`Conforme — ${confirmedValue.toFixed(3)} kg`, 'success');
+          showMessage(`Conforme — ${w.toFixed(3)} kg`, 'success');
           sensor.resetConfirmation();
         } catch (e: any) {
-          // On failure, allow retry by clearing the gate
           minWeightSinceCaptureRef.current = 0;
           showMessage(e?.message || "Impossible d'enregistrer", 'error');
         } finally {
@@ -397,10 +390,9 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
       })();
     }
   }, [
-    sensor.confirmedWeight.isConfirmed,
     sensor.weight.value,
     sensor.weight.status,
-    confirmedWeightState?.inTolerance,
+    weightState?.inTolerance,
     isTaskRunning,
     activeTask?.target_weight,
   ]);
