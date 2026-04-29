@@ -344,23 +344,35 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   // the next auto-validation. Prevents 2-3 captures of the same product when
   // it stays on the scale across consecutive confirmation cycles.
   const awaitingZeroRef = useRef(false);
+  // Counter of consecutive stable near-zero readings observed since the last
+  // capture. The gate only releases once we have seen ZERO_READINGS_REQUIRED
+  // of them in a row — debounces transient zero readings from sensor glitches.
+  const zeroReadingsRef = useRef(0);
+  const ZERO_READINGS_REQUIRED = 3;
 
   useEffect(() => {
     // Threshold under which the scale is considered "empty enough" to arm the
-    // next capture. Use 30% of the target weight: well below a single
+    // next capture. Use 15% of the target weight: well below a single
     // product's expected weight while tolerating small residue/tare drift.
     const target = Number(activeTask?.target_weight) || 0;
-    const zeroThreshold = target > 0 ? target * 0.3 : 0.5;
+    const zeroThreshold = target > 0 ? target * 0.15 : 0.2;
 
-    // Re-arm only on a deliberate STABLE near-zero reading. Ignoring unstable
-    // and error readings prevents transient glitches from prematurely
-    // releasing the gate while the product is still on the scale.
-    if (
-      awaitingZeroRef.current &&
-      sensor.weight.status === 'stable' &&
-      sensor.weight.value < zeroThreshold
-    ) {
-      awaitingZeroRef.current = false;
+    // Re-arm only after multiple consecutive stable near-zero readings.
+    if (awaitingZeroRef.current) {
+      const isNearZero =
+        sensor.weight.status === 'stable' && sensor.weight.value < zeroThreshold;
+
+      if (isNearZero) {
+        zeroReadingsRef.current += 1;
+        if (zeroReadingsRef.current >= ZERO_READINGS_REQUIRED) {
+          awaitingZeroRef.current = false;
+          zeroReadingsRef.current = 0;
+        }
+      } else if (sensor.weight.value >= zeroThreshold) {
+        // Weight went back up — restart the count
+        zeroReadingsRef.current = 0;
+      }
+      // For unstable/error/offline statuses, keep current count without resetting
     }
 
     if (
@@ -372,6 +384,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     ) {
       autoValidationRef.current = true;
       awaitingZeroRef.current = true;
+      zeroReadingsRef.current = 0;
 
       // Use the confirmed weight (average of stable readings) for the API call
       const confirmedValue = sensor.confirmedWeight.value;
@@ -385,6 +398,7 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
         } catch (e: any) {
           // On failure, don't block the next attempt
           awaitingZeroRef.current = false;
+          zeroReadingsRef.current = 0;
           showMessage(e?.message || "Impossible d'enregistrer", 'error');
         } finally {
           autoValidationRef.current = false;
