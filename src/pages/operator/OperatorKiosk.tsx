@@ -100,9 +100,9 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
   const selectedLine = useMemo(() => lines.find(l => l.id === lineId) || null, [lines, lineId]);
   const sensor = useSensorData({
     scaleUrl: selectedLine?.scale_url,
-    pollingInterval: 800,
-    stableReadingsRequired: 3,  // 3 lectures stables concordantes requises (~2.4s à 800ms)
-    stableDeviation: 0.5,       // écart max 0.5 entre les lectures
+    pollingInterval: 250,        // polling rapide pour capter les pesées brèves
+    stableReadingsRequired: 1,   // capture dès la première lecture stable
+    stableDeviation: 0.5,
   });
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
   const isTaskRunning = activeTask?.status === 'in_progress';
@@ -338,28 +338,24 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     return { label: 'Dans la tolérance', inTolerance: true };
   }, [sensor.confirmedWeight.isConfirmed, sensor.confirmedWeight.value, toleranceBounds]);
 
-  // === Auto-validation: uses CONFIRMED weight (multiple stable readings) ===
+  // === Auto-validation: capture every stable in-tolerance reading ===
+  // Strategy: as soon as the scale reports a stable weight within tolerance,
+  // record it. Duplicates are prevented by the zero-gate below.
   const autoValidationRef = useRef(false);
-  // Tracks the minimum stable weight observed since the last capture.
-  // A new capture is only allowed once this minimum has dropped below the
-  // near-zero threshold — i.e. the operator must have actually emptied the
-  // scale at some point since the previous capture.
+  // Minimum weight observed since the last capture. Re-armed to Infinity
+  // after a capture, so the next capture is impossible until the scale has
+  // actually been emptied (operator must remove the product physically).
   const minWeightSinceCaptureRef = useRef<number>(0);
-  // Cooldown end timestamp: secondary safety to absorb settling oscillations
-  // immediately after a capture.
-  const cooldownUntilRef = useRef<number>(0);
 
   useEffect(() => {
-    // Threshold under which the scale is considered "empty enough" to allow
-    // the next capture. 20% of target weight is well below any expected
-    // product weight while tolerating small residue and tare drift.
     const target = Number(activeTask?.target_weight) || 0;
+    // Threshold below which the scale is considered "empty enough" to allow
+    // the next capture. 20% of target weight tolerates residue/tare drift
+    // while still being well below a single product's weight.
     const zeroThreshold = target > 0 ? target * 0.2 : 0.2;
 
-    // Track minimum weight since last capture. Accept both stable and unstable
-    // readings — when removing a product the scale often passes through
-    // unstable near-zero before settling. Exclude error/offline which return
-    // value=0 from network glitches and would falsely open the gate.
+    // Track minimum weight since last capture (stable or unstable, since the
+    // scale may oscillate while the operator is removing the product).
     if (
       (sensor.weight.status === 'stable' || sensor.weight.status === 'unstable') &&
       sensor.weight.value < minWeightSinceCaptureRef.current
@@ -368,20 +364,20 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
     }
 
     const hasReturnedToZero = minWeightSinceCaptureRef.current < zeroThreshold;
-    const cooldownActive = Date.now() < cooldownUntilRef.current;
 
+    // Capture any stable in-tolerance reading. With stableReadingsRequired=1
+    // the sensor confirms on the first stable reading > 0, so this fires
+    // almost instantly when a product lands on the scale.
     if (
       isTaskRunning &&
       sensor.confirmedWeight.isConfirmed &&
       confirmedWeightState?.inTolerance &&
       !autoValidationRef.current &&
-      hasReturnedToZero &&
-      !cooldownActive
+      hasReturnedToZero
     ) {
       autoValidationRef.current = true;
-      // Re-arm the zero gate: next capture won't fire until min drops again
+      // Re-arm the zero gate
       minWeightSinceCaptureRef.current = Infinity;
-      cooldownUntilRef.current = Date.now() + 1500;
 
       const confirmedValue = sensor.confirmedWeight.value;
       (async () => {
@@ -389,12 +385,11 @@ export function OperatorKiosk({ embedded = false }: OperatorKioskProps) {
           await apiClient.addProductionItem(activeTaskId, confirmedValue, 'conforme');
           await loadTasks(lineId);
           await loadRecentItems(activeTaskId);
-          showMessage(`Conforme — ${confirmedValue.toFixed(3)} kg (poids confirmé)`, 'success');
+          showMessage(`Conforme — ${confirmedValue.toFixed(3)} kg`, 'success');
           sensor.resetConfirmation();
         } catch (e: any) {
-          // On failure, allow retry: reset gate
+          // On failure, allow retry by clearing the gate
           minWeightSinceCaptureRef.current = 0;
-          cooldownUntilRef.current = 0;
           showMessage(e?.message || "Impossible d'enregistrer", 'error');
         } finally {
           autoValidationRef.current = false;
