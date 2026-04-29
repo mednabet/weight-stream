@@ -5,23 +5,30 @@ import { WeightReading, WeightStatus } from '@/types/production';
 interface SensorConfig {
   scaleUrl?: string | null;
   pollingInterval?: number;
-  /** Number of consecutive stable readings required to confirm weight (default: 3) */
+  /** Number of times the same stable value must appear to be confirmed (default: 3) */
   stableReadingsRequired?: number;
-  /** Max deviation (in same unit as weight) between stable readings to consider them concordant (default: 0.5) */
-  stableDeviation?: number;
+  /** Rounding precision (decimal places) used to group similar readings (default: 2) */
+  stableRoundingDecimals?: number;
+}
+
+export interface StableFrequencyEntry {
+  value: number;
+  count: number;
 }
 
 export interface ConfirmedWeight {
-  /** The confirmed real weight (average of concordant stable readings) */
+  /** The confirmed weight — the stable value captured the most times */
   value: number;
-  /** Whether the weight has been confirmed by multiple stable readings */
+  /** Whether the weight has been confirmed */
   isConfirmed: boolean;
-  /** Number of consecutive stable readings collected so far */
+  /** How many times the most-frequent stable value has been captured */
   stableCount: number;
-  /** Number required for confirmation */
+  /** Number of captures required for confirmation */
   requiredCount: number;
   /** Progress percentage (0-100) toward confirmation */
   progress: number;
+  /** Frequency breakdown of all captured stable values, sorted by count desc */
+  stableFrequencies: StableFrequencyEntry[];
 }
 
 interface UseSensorDataResult {
@@ -112,148 +119,126 @@ async function fetchSensorViaProxy(scaleUrl: string): Promise<{ data?: string; e
   }
 }
 
+const EMPTY_CONFIRMED: ConfirmedWeight = {
+  value: 0,
+  isConfirmed: false,
+  stableCount: 0,
+  requiredCount: 3,
+  progress: 0,
+  stableFrequencies: [],
+};
+
 export function useSensorData(config: SensorConfig): UseSensorDataResult {
   const {
     scaleUrl,
     pollingInterval = 200,
     stableReadingsRequired = 3,
-    stableDeviation = 0.5,
+    stableRoundingDecimals = 2,
   } = config;
-  
+
   const [weight, setWeight] = useState<WeightReading>({ value: 0, status: 'offline', timestamp: Date.now() });
   const [isScaleConnected, setIsScaleConnected] = useState(false);
   const [errors, setErrors] = useState<{ scale?: string }>({});
-  
-  // Buffer of consecutive stable readings for weight confirmation
-  const stableBufferRef = useRef<number[]>([]);
+
+  // frequency map: rounded-value-string -> { value, count }
+  const freqMapRef = useRef<Map<string, StableFrequencyEntry>>(new Map());
+
   const [confirmedWeight, setConfirmedWeight] = useState<ConfirmedWeight>({
-    value: 0,
-    isConfirmed: false,
-    stableCount: 0,
+    ...EMPTY_CONFIRMED,
     requiredCount: stableReadingsRequired,
-    progress: 0,
   });
-  
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Reset confirmation (called after a weighing is recorded)
+
   const resetConfirmation = useCallback(() => {
-    stableBufferRef.current = [];
-    setConfirmedWeight({
-      value: 0,
-      isConfirmed: false,
-      stableCount: 0,
-      requiredCount: stableReadingsRequired,
-      progress: 0,
-    });
+    freqMapRef.current = new Map();
+    setConfirmedWeight({ ...EMPTY_CONFIRMED, requiredCount: stableReadingsRequired });
   }, [stableReadingsRequired]);
-  
-  // Check if all values in the buffer are concordant (within deviation)
-  const areReadingsConcordant = useCallback((readings: number[]): boolean => {
-    if (readings.length < 2) return true;
-    const min = Math.min(...readings);
-    const max = Math.max(...readings);
-    return (max - min) <= stableDeviation;
-  }, [stableDeviation]);
-  
+
+  const resetFreqMap = useCallback(() => {
+    freqMapRef.current = new Map();
+    setConfirmedWeight(prev =>
+      prev.isConfirmed ? prev : { ...EMPTY_CONFIRMED, requiredCount: stableReadingsRequired }
+    );
+  }, [stableReadingsRequired]);
+
   const pollSensors = useCallback(async () => {
-    // Poll scale via backend proxy
-    if (scaleUrl) {
-      const result = await fetchSensorViaProxy(scaleUrl);
-      if (result.data) {
-        const parsed = parseWeight(result.data);
-        setWeight({ ...parsed, timestamp: Date.now() });
-        setIsScaleConnected(parsed.status !== 'error');
-        setErrors(prev => ({ ...prev, scale: undefined }));
-        
-        // ─── Stable weight confirmation logic ───
-        if (parsed.status === 'stable' && parsed.value > 0) {
-          const buffer = stableBufferRef.current;
-          
-          // Check if new reading is concordant with existing buffer
-          if (buffer.length > 0 && !areReadingsConcordant([...buffer, parsed.value])) {
-            // New reading diverges too much → reset buffer with this new reading
-            stableBufferRef.current = [parsed.value];
-          } else {
-            // Concordant → add to buffer
-            buffer.push(parsed.value);
-          }
-          
-          const currentBuffer = stableBufferRef.current;
-          const count = currentBuffer.length;
-          const progress = Math.min(100, Math.round((count / stableReadingsRequired) * 100));
-          
-          if (count >= stableReadingsRequired) {
-            // Confirmed! Calculate average of the last N readings
-            const lastN = currentBuffer.slice(-stableReadingsRequired);
-            const avg = lastN.reduce((sum, v) => sum + v, 0) / lastN.length;
-            // Round to 3 decimal places
-            const confirmedValue = Math.round(avg * 1000) / 1000;
-            
-            setConfirmedWeight({
-              value: confirmedValue,
-              isConfirmed: true,
-              stableCount: count,
-              requiredCount: stableReadingsRequired,
-              progress: 100,
-            });
-          } else {
-            setConfirmedWeight({
-              value: 0,
-              isConfirmed: false,
-              stableCount: count,
-              requiredCount: stableReadingsRequired,
-              progress,
-            });
-          }
-        } else {
-          // Not stable or zero → reset buffer
-          stableBufferRef.current = [];
-          setConfirmedWeight(prev => 
-            prev.isConfirmed ? prev : {
-              value: 0,
-              isConfirmed: false,
-              stableCount: 0,
-              requiredCount: stableReadingsRequired,
-              progress: 0,
-            }
-          );
-        }
-      } else {
-        setWeight({ value: 0, status: 'offline', timestamp: Date.now() });
-        setIsScaleConnected(false);
-        setErrors(prev => ({ ...prev, scale: result.error }));
-        stableBufferRef.current = [];
-        setConfirmedWeight({
-          value: 0,
-          isConfirmed: false,
-          stableCount: 0,
-          requiredCount: stableReadingsRequired,
-          progress: 0,
-        });
-      }
-    } else {
+    if (!scaleUrl) {
       setWeight({ value: 0, status: 'offline', timestamp: Date.now() });
       setIsScaleConnected(false);
+      return;
     }
-  }, [scaleUrl, stableReadingsRequired, areReadingsConcordant]);
-  
+
+    const result = await fetchSensorViaProxy(scaleUrl);
+
+    if (!result.data) {
+      setWeight({ value: 0, status: 'offline', timestamp: Date.now() });
+      setIsScaleConnected(false);
+      setErrors(prev => ({ ...prev, scale: result.error }));
+      freqMapRef.current = new Map();
+      setConfirmedWeight({ ...EMPTY_CONFIRMED, requiredCount: stableReadingsRequired });
+      return;
+    }
+
+    const parsed = parseWeight(result.data);
+    setWeight({ ...parsed, timestamp: Date.now() });
+    setIsScaleConnected(parsed.status !== 'error');
+    setErrors(prev => ({ ...prev, scale: undefined }));
+
+    if (parsed.status === 'stable' && parsed.value > 0) {
+      // Round to configured decimal places for grouping
+      const factor = Math.pow(10, stableRoundingDecimals);
+      const rounded = Math.round(parsed.value * factor) / factor;
+      const key = rounded.toFixed(stableRoundingDecimals);
+
+      const freq = freqMapRef.current;
+      const existing = freq.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        freq.set(key, { value: rounded, count: 1 });
+      }
+
+      // Find the value captured the most times
+      let maxCount = 0;
+      let mostFrequentValue = rounded;
+      for (const entry of freq.values()) {
+        if (entry.count > maxCount) {
+          maxCount = entry.count;
+          mostFrequentValue = entry.value;
+        }
+      }
+
+      // Build sorted frequency list for display
+      const stableFrequencies: StableFrequencyEntry[] = Array.from(freq.values())
+        .sort((a, b) => b.count - a.count);
+
+      const progress = Math.min(100, Math.round((maxCount / stableReadingsRequired) * 100));
+
+      setConfirmedWeight({
+        value: mostFrequentValue,
+        isConfirmed: maxCount >= stableReadingsRequired,
+        stableCount: maxCount,
+        requiredCount: stableReadingsRequired,
+        progress,
+        stableFrequencies,
+      });
+    } else {
+      // Not stable or zero → reset frequency map
+      resetFreqMap();
+    }
+  }, [scaleUrl, stableReadingsRequired, stableRoundingDecimals, resetFreqMap]);
+
   useEffect(() => {
-    // Clear any existing interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-    
-    // Start polling if we have a scale URL
+
     if (scaleUrl) {
-      // Initial poll
       pollSensors();
-      
-      // Set up interval
       intervalRef.current = setInterval(pollSensors, pollingInterval);
     }
-    
-    // Cleanup on unmount or config change
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -261,7 +246,7 @@ export function useSensorData(config: SensorConfig): UseSensorDataResult {
       }
     };
   }, [scaleUrl, pollingInterval, pollSensors]);
-  
+
   return {
     weight,
     confirmedWeight,
